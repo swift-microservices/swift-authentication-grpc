@@ -32,3 +32,9 @@ jobs:
   release-builds:
     name: Release builds
     uses: apple/swift-nio/.github/workflows/release_builds.yml@main
+
+  foundation-linking:
+    name: Foundation linking
+    uses: vapor/ci/.github/workflows/check-foundation-linking.yml@main
+    with:
+      swift_image: swift:6.3-noble
