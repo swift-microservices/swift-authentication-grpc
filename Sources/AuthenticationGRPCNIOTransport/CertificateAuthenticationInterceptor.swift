@@ -5,11 +5,11 @@
 //  Created by Zaid Rahhawi on 9/11/26.
 //
 
-import Authentication
-import GRPCCore
+public import Authentication
+public import GRPCCore
 import GRPCNIOTransportHTTP2Posix
 import ServiceContextModule
-import X509
+public import X509
 
 /// Binds the principal the peer's certificate proves, for the length of the call.
 ///
@@ -39,7 +39,7 @@ public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerIn
         request: StreamingServerRequest<Input>,
         context: ServerContext,
         next:
-            @Sendable (
+            @concurrent @Sendable (
                 _ request: StreamingServerRequest<Input>,
                 _ context: ServerContext
             ) async throws -> StreamingServerResponse<Output>

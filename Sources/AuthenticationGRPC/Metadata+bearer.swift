@@ -5,7 +5,7 @@
 //  Created by Zaid Rahhawi on 9/11/26.
 //
 
-import GRPCCore
+public import GRPCCore
 
 extension Metadata {
     /// The credential from the first `authorization` entry, or `nil` when there is none, or when

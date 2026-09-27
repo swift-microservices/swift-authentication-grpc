@@ -5,8 +5,8 @@
 //  Created by Zaid Rahhawi on 9/11/26.
 //
 
-import Authentication
-import GRPCCore
+public import Authentication
+public import GRPCCore
 import ServiceContextModule
 
 /// Binds the principal a bearer token proves, for the length of the call.
@@ -47,7 +47,7 @@ public struct BearerAuthenticationInterceptor<Identity: Sendable>: ServerInterce
         request: StreamingServerRequest<Input>,
         context: ServerContext,
         next:
-            @Sendable (
+            @concurrent @Sendable (
                 _ request: StreamingServerRequest<Input>,
                 _ context: ServerContext
             ) async throws -> StreamingServerResponse<Output>

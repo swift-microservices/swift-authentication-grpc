@@ -14,6 +14,8 @@ jobs:
     with:
       # Files carry the author header, not a license block; the LICENSE file is the license.
       license_header_check_enabled: false
+      # Accept the intentional isolation migration while checking all other API changes.
+      api_breakage_check_allowlist_path: .github/api-breakage-allowlist.txt
       # Documentation is built without the docc plugin, so the manifest stays dependency-free.
       docs_check_enabled: false
 

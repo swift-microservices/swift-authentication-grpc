@@ -6,7 +6,7 @@
 //
 
 import Authentication
-import GRPCCore
+public import GRPCCore
 import ServiceContextModule
 
 /// Presents the caller's bearer token on an outgoing call, so one token identifies the caller at
@@ -31,10 +31,11 @@ public struct BearerPropagationInterceptor<Identity: Sendable>: ClientIntercepto
     public func intercept<Input: Sendable, Output: Sendable>(
         request: StreamingClientRequest<Input>,
         context: ClientContext,
-        next: (
-            _ request: StreamingClientRequest<Input>,
-            _ context: ClientContext
-        ) async throws -> StreamingClientResponse<Output>
+        next:
+            @concurrent (
+                _ request: StreamingClientRequest<Input>,
+                _ context: ClientContext
+            ) async throws -> StreamingClientResponse<Output>
     ) async throws -> StreamingClientResponse<Output> {
         guard let principal = ServiceContext.current?[PrincipalKey<Identity, String>.self] else {
             return try await next(request, context)
