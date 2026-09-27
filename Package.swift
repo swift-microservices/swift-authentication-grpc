@@ -1,6 +1,20 @@
 // swift-tools-version: 6.3
 import PackageDescription
 
+let swiftSettings: [SwiftSetting] = [
+    // https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md
+    .enableUpcomingFeature("ExistentialAny"),
+
+    // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md
+    .enableUpcomingFeature("MemberImportVisibility"),
+
+    // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0409-access-level-on-imports.md
+    .enableUpcomingFeature("InternalImportsByDefault"),
+
+    // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+]
+
 let package = Package(
     name: "swift-authentication-grpc",
     platforms: [
@@ -31,7 +45,8 @@ let package = Package(
                 .product(name: "Authentication", package: "swift-authentication"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "ServiceContextModule", package: "swift-service-context"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .target(
             name: "AuthenticationGRPCNIOTransport",
@@ -41,7 +56,8 @@ let package = Package(
                 .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport"),
                 .product(name: "ServiceContextModule", package: "swift-service-context"),
                 .product(name: "X509", package: "swift-certificates"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "AuthenticationGRPCTests",
@@ -50,7 +66,8 @@ let package = Package(
                 .product(name: "Authentication", package: "swift-authentication"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "ServiceContextModule", package: "swift-service-context"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "AuthenticationGRPCNIOTransportTests",
@@ -62,7 +79,9 @@ let package = Package(
                 .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport"),
                 .product(name: "ServiceContextModule", package: "swift-service-context"),
                 .product(name: "X509", package: "swift-certificates"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )
