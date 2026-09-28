@@ -31,12 +31,12 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.1.0"),
+        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.2.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.20.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.3.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.0"),
-        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.9.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.9.1"),
     ],
     targets: [
         .target(

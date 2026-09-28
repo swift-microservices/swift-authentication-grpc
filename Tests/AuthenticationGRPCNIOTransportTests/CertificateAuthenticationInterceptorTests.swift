@@ -8,12 +8,17 @@
 import Authentication
 import AuthenticationGRPCNIOTransport
 import Crypto
-import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2Posix
 import ServiceContextModule
 import Testing
 import X509
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 @Suite
 struct CertificateAuthenticationInterceptorTests {
