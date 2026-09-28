@@ -32,6 +32,13 @@ private struct StringCodec: MessageSerializer, MessageDeserializer {
 
 private let method = MethodDescriptor(fullyQualifiedService: "test.Identity", method: "WhoAmI")
 
+private final class ConnectionCounter: Sendable {
+    private let count = Mutex(0)
+
+    func increment() { count.withLock { $0 += 1 } }
+    var value: Int { count.withLock { $0 } }
+}
+
 private struct IdentityService: RegistrableRPCService {
     func registerMethods<Transport: ServerTransport>(with router: inout RPCRouter<Transport>) {
         router.registerHandler(forMethod: method, deserializer: StringCodec(), serializer: StringCodec()) { request, _ in
@@ -181,12 +188,12 @@ private struct IdentityService: RegistrableRPCService {
         let roots = try bundle(root)
         let serverSecurity = try await security(TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false), roots: roots)
         let clientSecurity = try await security(TestCertificate(issuer: root, uris: ["spiffe://example/client"], ca: false), roots: roots)
-        let connections = Atomic<Int>(0)
+        let connections = ConnectionCounter()
         var configuration = SPIFFETransportSecurity.serverConfiguration
         configuration.connection.maxAge = .milliseconds(100)
         configuration.connection.maxGraceTime = .milliseconds(100)
         configuration.channelDebuggingCallbacks.onAcceptTCPConnection = { channel in
-            connections.wrappingAdd(1, ordering: .relaxed)
+            connections.increment()
             return channel.eventLoop.makeSucceededVoidFuture()
         }
         let serverTransport = HTTP2ServerTransport.Posix(address: .ipv4(host: "127.0.0.1", port: 0), transportSecurity: try serverSecurity.serverTransportSecurity(), config: configuration)
@@ -201,7 +208,7 @@ private struct IdentityService: RegistrableRPCService {
                 try await Task.sleep(for: .milliseconds(500))
                 let result = try await client.unary(request: ClientRequest(message: ""), descriptor: method, serializer: StringCodec(), deserializer: StringCodec(), options: options) { try $0.message }
                 #expect(result == "spiffe://example/client")
-                #expect(connections.load(ordering: .relaxed) >= 2)
+                #expect(connections.value >= 2)
             }
         }
     }
@@ -212,7 +219,14 @@ private struct IdentityService: RegistrableRPCService {
         let leaf = try TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false, notAfter: expiration)
         let value = try await security(leaf, roots: bundle(root))
         #expect(value.isReady)
-        try await Task.sleep(for: .seconds(max(0, expiration.timeIntervalSinceNow) + 0.1))
+        // Certificate validity uses wall time; a monotonic sleep alone cannot establish expiry.
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(10))
+        let certificateExpiration = leaf.certificate.notValidAfter
+        while Date.now <= certificateExpiration, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try #require(Date.now > certificateExpiration)
         #expect(!value.isReady)
         #expect(throws: SPIFFETransportSecurity.Error.notReady) { try value.serverTransportSecurity() }
     }
