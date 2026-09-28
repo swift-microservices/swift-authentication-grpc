@@ -9,4 +9,4 @@ permissions:
 
 jobs:
   auto-release:
-    uses: apple/swift-temporal-sdk/.github/workflows/auto-release.yml@ffeb89de74c4a1296bb6ee5cfc880a78bd7c3ac4 # main as of 2026-09-18
+    uses: apple/swift-temporal-sdk/.github/workflows/auto-release.yml@a34c7fb54651c8492caa905fcd7f7245faed1432  # 1.2.0
