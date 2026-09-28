@@ -151,11 +151,9 @@ Swift 6.3, macOS 15 or Linux.
 
 ## Development
 
-The SPIFFE integration depends on the renamed package's forthcoming `0.2.0` release. Until
-that version has been tagged, use `python3 scripts/test-with-local-spiffe.py` against
-its sibling working copy. The script restores the tagged manifest after the test run.
-The new `AuthenticationSPIFFEGRPC` product also requires a new release of this package; it is
-not included in the existing `0.1.0` release shown above.
+Run `swift test` against the published package dependencies. For coordinated development
+with a sibling SPIFFE checkout, use `python3 scripts/test-with-local-spiffe.py`.
+The script restores the tagged manifest after the test run.
 
 ```sh
 swift test
