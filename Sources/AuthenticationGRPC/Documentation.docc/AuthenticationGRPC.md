@@ -37,7 +37,7 @@ Over the NIO transport, the peer's certificate is bound the same way:
 ```swift
 import AuthenticationGRPCNIOTransport
 
-CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
+CertificateAuthenticationInterceptor(authenticator: ApplicationCertificateAuthenticator())
 ```
 
 ## Topics

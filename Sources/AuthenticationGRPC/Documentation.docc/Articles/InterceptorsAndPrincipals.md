@@ -20,9 +20,8 @@ identity and the credential type.
 An authenticator answers one of three ways, and each has a fixed meaning on the wire:
 
 - **An identity** binds the principal, and the handler finds it in the `ServiceContext`.
-- **`nil`** declines, and the call continues with nothing bound. A certificate from another
-  trust domain is the usual case: the transport already verified it, so the peer is real, it is
-  simply not one this service admits.
+- **`nil`** declines, and the call continues with nothing bound. An application-specific authenticator can decline a credential it does not map.
+  SPIFFE verification instead refuses an unknown trust domain.
 - **A throw** refuses, and the call fails with `RPCError(code: .unauthenticated)` before the
   handler runs. A token with a bad signature or an expired claim is the usual case.
 
@@ -34,7 +33,7 @@ Requiring a caller is the handler's decision, made against the principal it read
 
 A service relaying a person's call arrives with its own certificate and the person's token. The
 two interceptors bind two principals under two keys, `PrincipalKey<AppToken, String>` and
-`PrincipalKey<SPIFFEID, Certificate>`, and neither touches the other. A handler can ask either
+`PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>`, and neither touches the other. A handler can ask either
 question: which process is calling, and on whose behalf.
 
 ## The same caller, onward
@@ -45,3 +44,9 @@ to the upstream services that take a token, so a public service is dialled with 
 made outside any caller's request, startup work, a workflow activity, goes out unauthenticated
 rather than failing: a process identifies itself on such calls with its certificate, which the
 transport presents at the handshake without any interceptor's help.
+
+## SPIFFE
+
+Use the separate `AuthenticationSPIFFEGRPC` product for full X.509-SVID verification and
+required workload identity. It configures TLS with domain-specific trust and exact server-ID
+matching. Its interceptor requires validated chain context, never the leaf-only fallback.

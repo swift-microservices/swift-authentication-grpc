@@ -1,34 +1,28 @@
 # Repository guidelines
 
-This package binds principals on gRPC. Read this before changing anything.
+This package connects authentication to gRPC.
 
-## What this package is
+## Products
 
-- Two products. `AuthenticationGRPC` holds `BearerAuthenticationInterceptor`,
-  `BearerPropagationInterceptor`, and `Metadata.bearer`, and depends on grpc-swift-2 alone, so it
-  works on any transport. `AuthenticationGRPCNIOTransport` holds
-  `CertificateAuthenticationInterceptor` and depends on the NIO Posix HTTP/2 transport and
-  swift-certificates, because only that transport exposes the peer certificate.
-- The interceptors take any `Authenticator` from swift-authentication and never know which
-  credential format is in use. They read the credential off the call, apply the authenticator,
-  and bind a `Principal` under `PrincipalKey<Identity, Credential>`.
-- The three answers are honoured exactly: an identity binds, `nil` continues unbound, a throw
-  fails the call with `RPCError(code: .unauthenticated)`. A call with no credential never
-  reaches the authenticator.
-- Interceptors never require a caller. That is the handler's decision.
-
-## What does not belong here
-
-- Authorization. Roles and permissions are the application's.
-- A credential format. Proofs are swift-authentication-jwt and swift-authentication-x509.
-- A process credential for outgoing calls. `BearerPropagationInterceptor` forwards the inbound
-  caller's token and nothing else; a process identifies itself with its certificate.
+- `AuthenticationGRPC`: transport-independent bearer authentication, propagation, and metadata.
+- `AuthenticationGRPCNIOTransport`: the generic certificate interceptor. An identity binds,
+  nil continues anonymously, and a thrown error refuses authentication.
+- `AuthenticationSPIFFEGRPC`: SPIFFE TLS callbacks, exact server-ID matching, required peer
+  binding, and validated atomic credential/trust updates. It depends on AuthenticationSPIFFE;
+  the generic products do not. Cryptographic/profile verification stays in that package.
+- The SPIFFE interceptor requires verified TLS chain context and binds
+  `PrincipalKey<Identity, SPIFFEAuthenticator.Verification>`. It refuses missing/invalid peers.
+- An external provider supplies updates. No issuer or workload-attestation service is implemented
+  here. Validate updates before publishing; retain only the last still-valid snapshot on failure.
+- Policies and business permissions belong in application use cases. Never log private material.
+- Use real TLS integration tests for identity, rotation, and rejection behavior. Bound established
+  connection lifetimes and document that already-running streams require shutdown/draining.
 
 ## Swift
 
 - Swift 6.3, strict concurrency, `Sendable` everywhere it is meaningful.
 - Tests use Swift Testing and call `intercept` directly with a constructed request and context;
-  no transport is started. `Metadata.bearer` is proven by a table, the certificate interceptor
+  generic adapter tests need no transport. SPIFFE tests also start real local TLS transports. `Metadata.bearer` is proven by a table, the certificate interceptor
   against certificates generated in memory over a constructed NIO transport context.
 - Doc comments on every public declaration; the DocC catalog is the long-form explanation.
 - Format with `swift-format format --in-place --recursive Sources Tests`; the soundness check on
