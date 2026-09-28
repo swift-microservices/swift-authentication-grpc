@@ -10,9 +10,10 @@ same token on the way out.
 | Product | Depends on | For |
 | --- | --- | --- |
 | `AuthenticationGRPC` | grpc-swift-2 | the bearer interceptors and `Metadata.bearer`; any transport |
+| `AuthenticationSPIFFEGRPC` | AuthenticationSPIFFE, NIO TLS | SPIFFE mutual TLS, exact endpoint matching, peer binding, and atomic updates |
 | `AuthenticationGRPCNIOTransport` | grpc-swift-nio-transport, swift-certificates | the certificate interceptor; needs the NIO Posix HTTP/2 transport, the only one that exposes the peer certificate |
 
-Both take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
+The generic interceptors take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
 shape: an `Authenticator<Credential, Identity>` proves a credential, declines it with `nil`, or
 refuses it by throwing. The interceptors read the credential off the call and bind the result as
 a `Principal` in the task's `ServiceContext` for the length of the call.
@@ -43,19 +44,86 @@ guard let caller = ServiceContext.current?[PrincipalKey<AppToken, String>.self]?
 }
 ```
 
-## Binding a peer from its certificate
+## SPIFFE workload authentication
 
 ```swift
-import AuthenticationGRPCNIOTransport
+import AuthenticationSPIFFE
+import AuthenticationSPIFFEGRPC
+import GRPCNIOTransportHTTP2Posix
 
-CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
+let security = try await SPIFFETransportSecurity(
+    certificateChain: localCertificates,
+    privateKey: localPrivateKey,
+    bundle: SPIFFETrustBundle(
+        trustDomain: "production.example.com",
+        authorities: trustedAuthorities
+    )
+)
+
+let transport = HTTP2ServerTransport.Posix(
+    address: .ipv4(host: "0.0.0.0", port: 50051),
+    transportSecurity: try security.serverTransportSecurity(),
+    config: SPIFFETransportSecurity.serverConfiguration
+)
+let interceptor = SPIFFEAuthenticationInterceptor(security: security)
+
+let usersSecurity = try security.clientTransportSecurity(
+    expectedServer: SPIFFEID(uri: "spiffe://production.example.com/users")
+)
+// Pass usersSecurity to the users client's Posix transport.
 ```
 
-The transport verified the certificate at the handshake; the authenticator reads who it names.
-A connection with no client certificate, or one the authenticator declines, continues unbound: an
-unlisted peer is a valid one this service simply does not admit. The principal is bound under
-`PrincipalKey<SPIFFEID, Certificate>`, separately from any bearer principal, because a service
-relaying a person's call arrives with its own certificate and the person's token.
+Apply the interceptor to the protected services. It requires a TLS-validated peer chain,
+verifies it against current SPIFFE trust, and binds
+`PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>`. A project can provide
+`identity: { id in ServiceIdentity(spiffeID: id) }` to bind its own identity type. Neither
+verification nor mapping grants business permissions; use cases make those decisions.
+
+The server requires client certificates. Clients verify both the full chain and the exact
+expected SPIFFE ID; DNS addresses locate endpoints and are not used as SPIFFE identities.
+A missing chain or invalid peer fails as `unauthenticated`. User bearer principals are separate.
+Full verification runs at handshake and on request-cache misses, not for every request.
+The bounded cache expires with the chain and is invalidated on every trust update.
+
+### Renewal and revocation
+
+An external identity provider obtains short-lived SVIDs and trust bundles. After each update:
+
+```swift
+try await security.update(
+    certificateChain: renewedCertificates,
+    privateKey: renewedKey,
+    bundle: renewedBundle
+)
+```
+
+The adapter validates the chain and key match before atomically publishing the pair and bundle.
+An invalid update leaves the last valid snapshot intact. Concurrent updates are rejected;
+serialize the provider's update stream. A workload ID cannot change during renewal. New
+handshakes use renewed credentials without rebuilding the listener. Readiness is
+`security.isReady`; expired or revoked local material refuses new handshakes and protected RPCs.
+
+This product is the renewal **sink**, not a SPIRE Workload API client or an issuer. The provider
+integration owns attestation, fetching, renewal scheduling/backoff, and outage/expiry alerts.
+Keep that task in the application's structured lifecycle. File providers must publish a coherent
+certificate/key/bundle generation; never independently watch three partially replaced files.
+Expose time-to-expiry and renewal outcomes from the provider without logging private material.
+
+Use overlapping authorities during planned root rotation, renew all peers, then remove old
+roots. Removal is enforced on subsequent protected RPCs even on existing connections.
+`security.revoke()` refuses new handshakes and RPCs; restoring service requires a validated update.
+Existing streams and outgoing connections must also be drained or shut down by the application.
+TLS does not reauthenticate a connection simply because files or trust changed.
+
+`serverConfiguration` bounds connection age to five minutes and drain grace to thirty seconds.
+Choose smaller bounds when required by the credential lifetime or revocation objective, and set
+RPC deadlines. This is an operational bound, not a claim of instantaneous stream revocation.
+
+### Generic certificate identities
+
+`AuthenticationGRPCNIOTransport` provides `CertificateAuthenticationInterceptor` for
+application-defined certificate schemes. It accepts `Authenticator<Certificate, Identity>`:
+an identity binds, `nil` continues anonymously, and a thrown error refuses authentication.
 
 ## Calling onward as the same caller
 
@@ -74,14 +142,20 @@ a process identifies itself on such calls with its certificate, not a token.
 ## Testing a handler
 
 `Authenticator` is a one-method protocol, so a handler test conforms a dictionary to it and sends
-`Bearer admin-token` without minting a key. The interceptors themselves are tested the same way
-here, by calling `intercept` directly with a constructed request and context.
+`Bearer admin-token` without minting a key. Generic interceptors are tested directly. SPIFFE tests also use real local TLS client/server
+connections for endpoint matching, certificate rejection, renewal, and root removal.
 
 ## Requirements
 
 Swift 6.3, macOS 15 or Linux.
 
 ## Development
+
+The SPIFFE integration depends on the renamed package's forthcoming `0.2.0` release. Until
+that version has been tagged, use `python3 scripts/test-with-local-spiffe.py` against
+its sibling working copy. The script restores the tagged manifest after the test run.
+The new `AuthenticationSPIFFEGRPC` product also requires a new release of this package; it is
+not included in the existing `0.1.0` release shown above.
 
 ```sh
 swift test

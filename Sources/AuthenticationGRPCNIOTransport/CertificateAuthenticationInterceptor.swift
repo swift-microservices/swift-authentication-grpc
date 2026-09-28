@@ -16,12 +16,13 @@ public import X509
 /// The certificate is the one the peer presented at the TLS handshake, which the transport
 /// verified before the request was read. Only the NIO Posix HTTP/2 transport exposes it, which
 /// is why this interceptor is its own product. A connection with no client certificate, or a
-/// certificate the authenticator declines, continues unbound: the transport already refused
-/// every certificate that could be refused, and an unlisted peer is a valid one this service
-/// simply does not admit. An authenticator that throws fails the call as unauthenticated.
+/// certificate the authenticator declines, continues unbound. An authenticator can enforce
+/// additional identity checks; a throw fails the call as unauthenticated. Configure transport
+/// verification before using this generic adapter. For SPIFFE use AuthenticationSPIFFEGRPC,
+/// which integrates full SVID verification and requires validated chain context.
 ///
 /// ```swift
-/// CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
+/// CertificateAuthenticationInterceptor(authenticator: ApplicationCertificateAuthenticator())
 /// ```
 ///
 /// A call can carry both a certificate and a token, a service relaying a person's call, so this
@@ -29,8 +30,8 @@ public import X509
 public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerInterceptor {
     private let authenticator: any Authenticator<Certificate, Identity>
 
-    /// - Parameter authenticator: Names the peer from its certificate, such as a
-    ///   `SPIFFEAuthenticator`.
+    /// - Parameter authenticator: Names the peer from its certificate, using an application-defined certificate scheme.
+    ///   For SPIFFE, use the AuthenticationSPIFFEGRPC product instead.
     public init(authenticator: any Authenticator<Certificate, Identity>) {
         self.authenticator = authenticator
     }
