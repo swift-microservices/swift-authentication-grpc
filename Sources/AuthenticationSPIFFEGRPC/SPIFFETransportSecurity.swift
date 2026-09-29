@@ -7,7 +7,7 @@
 
 public import AuthenticationSPIFFE
 public import GRPCNIOTransportHTTP2Posix
-import NIOCertificateReloading
+public import NIOCertificateReloading
 import NIOCore
 import NIOSSL
 import SwiftASN1
@@ -33,6 +33,7 @@ public final class SPIFFETransportSecurity: Sendable {
     private struct State: Sendable {
         var snapshot: Snapshot
         var revision = 0
+        var reloadRevision = 0
         var revoked = false
         var peers: [X509.ValidatedCertificateChain: SPIFFEAuthenticator.Verification] = [:]
     }
@@ -79,6 +80,45 @@ public final class SPIFFETransportSecurity: Sendable {
             $0.revoked = false
             $0.peers.removeAll(keepingCapacity: true)
         }
+    }
+
+    /// Creates a standard timed file/memory loader which publishes only validated SPIFFE material.
+    /// Add the returned loader to your service group. Keep using this object's transport factories:
+    /// the loader's raw override is not SPIFFE-validated. Trust roots remain the supplied bundle.
+    /// Successful-load callbacks run after validation; rejected updates invoke the failure callback
+    /// and retain the last valid snapshot. Callbacks may run on an asynchronous executor.
+    public func certificateReloader(configuration: TimedCertificateReloader.Configuration, bundle: SPIFFETrustBundle) throws -> TimedCertificateReloader {
+        var configuration = configuration
+        let loaded = configuration.onCertificateLoaded
+        let failed = configuration.onCertificateLoadFailed
+        configuration.onCertificateLoaded = { change in
+            guard change.previousX509CertificateChain != change.currentX509CertificateChain || change.previousX509PrivateKey?.publicKey != change.currentX509PrivateKey.publicKey else {
+                if !self.isReady { failed?(.init(error: Error.notReady)) }
+                return
+            }
+            let (ticket, revision) = self.state.withLock {
+                $0.reloadRevision += 1
+                return ($0.reloadRevision, $0.revision)
+            }
+            // The NIO callback is synchronous; SPIFFE path validation is asynchronous.
+            // Tickets prevent a slower older validation from overwriting newer material.
+            Task { @concurrent in
+                do {
+                    let snapshot = try await Self.snapshot(certificateChain: change.currentX509CertificateChain, privateKey: change.currentX509PrivateKey, bundle: bundle)
+                    guard snapshot.local.id == self.id else { throw Error.identityChanged }
+                    try self.state.withLock {
+                        guard !$0.revoked, $0.reloadRevision == ticket, $0.revision == revision else { throw Error.concurrentUpdate }
+                        $0.snapshot = snapshot
+                        $0.revision += 1
+                        $0.peers.removeAll(keepingCapacity: true)
+                    }
+                    loaded?(change)
+                } catch {
+                    failed?(.init(error: error))
+                }
+            }
+        }
+        return try TimedCertificateReloader.makeReloaderValidatingSources(configuration: configuration)
     }
 
     /// Refuses new handshakes and RPCs immediately. The application must also close transports

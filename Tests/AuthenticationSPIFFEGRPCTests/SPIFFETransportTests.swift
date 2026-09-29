@@ -10,6 +10,7 @@ import AuthenticationSPIFFE
 import AuthenticationSPIFFEGRPC
 import GRPCCore
 import GRPCNIOTransportHTTP2Posix
+import NIOCertificateReloading
 import NIOCore
 import ServiceContextModule
 import SwiftASN1
@@ -40,11 +41,13 @@ private final class ConnectionCounter: Sendable {
 }
 
 private struct IdentityService: RegistrableRPCService {
+    var beforeResponse: @Sendable () async -> Void = {}
     func registerMethods<Transport: ServerTransport>(with router: inout RPCRouter<Transport>) {
         router.registerHandler(forMethod: method, deserializer: StringCodec(), serializer: StringCodec()) { request, _ in
             _ = try await ServerRequest(stream: request)
             let principal = ServiceContext.current?[PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>.self]
             let identity = principal?.identity.uri ?? "anonymous"
+            await beforeResponse()
             return StreamingServerResponse { writer in
                 try await writer.write(identity)
                 return [:]
@@ -76,9 +79,9 @@ private struct IdentityService: RegistrableRPCService {
         }
     }
 
-    private func withServer<T: Sendable>(security: SPIFFETransportSecurity, operation: (Int) async throws -> T) async throws -> T {
+    private func withServer<T: Sendable>(security: SPIFFETransportSecurity, beforeResponse: @escaping @Sendable () async -> Void = {}, operation: (Int) async throws -> T) async throws -> T {
         let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: "127.0.0.1", port: 0), transportSecurity: try security.serverTransportSecurity(), config: SPIFFETransportSecurity.serverConfiguration)
-        return try await withGRPCServer(transport: transport, services: [IdentityService()], interceptors: [SPIFFEAuthenticationInterceptor(security: security)]) { server in
+        return try await withGRPCServer(transport: transport, services: [IdentityService(beforeResponse: beforeResponse)], interceptors: [SPIFFEAuthenticationInterceptor(security: security)]) { server in
             let address = try #require(await server.listeningAddress?.ipv4)
             return try await operation(address.port)
         }
@@ -111,6 +114,83 @@ private struct IdentityService: RegistrableRPCService {
                 config.trustRoots = .certificates([.bytes(rootPEM, format: .pem)])
             }
             await #expect(throws: (any Error).self) { try await call(port: port, tls: tls) }
+        }
+    }
+
+    @Test func timedReloaderPublishesOnlyValidatedSPIFFEUpdates() async throws {
+        let root = try TestCertificate()
+        let roots = try bundle(root)
+        let initial = try TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false)
+        let server = try await security(initial, roots: roots)
+        let client = try await security(TestCertificate(issuer: root, uris: ["spiffe://example/client"], ca: false), roots: roots)
+        func bytes(_ credential: TestCertificate) throws -> (certificate: [UInt8], key: [UInt8]) {
+            (Array(try credential.certificate.serializeAsPEM().pemString.utf8), Array(try credential.key.serializeAsPEM().pemString.utf8))
+        }
+        let source = Mutex(try bytes(initial))
+        let events = AsyncStream<Bool>.makeStream()
+        defer { events.continuation.finish() }
+        let loader = try server.certificateReloader(
+            configuration: .init(
+                refreshInterval: .seconds(60),
+                certificateSource: .init(location: .memory { source.withLock { $0.certificate } }, format: .pem),
+                privateKeySource: .init(location: .memory { source.withLock { $0.key } }, format: .pem)
+            ) { configuration in
+                configuration.onCertificateLoaded = { _ in events.continuation.yield(true) }
+                configuration.onCertificateLoadFailed = { _ in events.continuation.yield(false) }
+            }, bundle: roots)
+        var eventsIterator = events.stream.makeAsyncIterator()
+        #expect(await eventsIterator.next(isolation: #isolation) == true)
+        try await withServer(security: server) { port async throws -> Void in
+            let renewed = try TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false)
+            let renewedBytes = try bytes(renewed)
+            source.withLock { $0 = renewedBytes }
+            try loader.reload()
+            #expect(await eventsIterator.next(isolation: #isolation) == true)
+            #expect(try await call(port: port, client: client) == "spiffe://example/client")
+            let untrustedRoot = try TestCertificate()
+            let rejected = [
+                try TestCertificate(issuer: root, uris: ["spiffe://example/other"], ca: false),
+                try TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false, notAfter: Date.now.addingTimeInterval(-1)),
+                try TestCertificate(issuer: untrustedRoot, uris: ["spiffe://example/server"], ca: false),
+            ]
+            for credential in rejected {
+                let invalidBytes = try bytes(credential)
+                source.withLock { $0 = invalidBytes }
+                try loader.reload()
+                #expect(await eventsIterator.next(isolation: #isolation) == false)
+                #expect(server.isReady)
+                // The raw loader holds invalid SPIFFE material; the transport must not expose it.
+                #expect(try await call(port: port, client: client) == "spiffe://example/client")
+            }
+        }
+    }
+
+    @Test func renewalDoesNotInterruptAnInFlightRPC() async throws {
+        let root = try TestCertificate()
+        let roots = try bundle(root)
+        let server = try await security(TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false), roots: roots)
+        let client = try await security(TestCertificate(issuer: root, uris: ["spiffe://example/client"], ca: false), roots: roots)
+        let entered = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        defer {
+            entered.continuation.finish()
+            release.continuation.finish()
+        }
+        try await withServer(
+            security: server,
+            beforeResponse: {
+                entered.continuation.yield(())
+                for await _ in release.stream { break }
+            }
+        ) { port async throws -> Void in
+            async let response = call(port: port, client: client)
+            for await _ in entered.stream { break }
+            let renewed = try TestCertificate(issuer: root, uris: ["spiffe://example/server"], ca: false)
+            try await server.update(certificateChain: [renewed.certificate], privateKey: renewed.key, bundle: roots)
+            release.continuation.finish()
+            #expect(try await response == "spiffe://example/client")
+            // The same listener also accepts a fresh connection after rotation.
+            #expect(try await call(port: port, client: client) == "spiffe://example/client")
         }
     }
 
