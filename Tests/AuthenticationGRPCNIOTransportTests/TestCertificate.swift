@@ -23,7 +23,7 @@ struct TestCertificate {
         issuer: TestCertificate? = nil,
         uris: [String] = [],
         ca: Bool = true,
-        dnsNames: [String] = [],
+        dnsNames: [String] = ["server.example"],
         usage: KeyUsage? = nil,
         includeUsage: Bool = true,
         criticalUsage: Bool = true,
@@ -54,7 +54,7 @@ struct TestCertificate {
                     try Certificate.Extension(usage ?? KeyUsage(digitalSignature: !ca, keyCertSign: ca, cRLSign: ca), critical: criticalUsage)
                 }
                 if let eku { eku }
-                if !uris.isEmpty {
+                if !uris.isEmpty || !dnsNames.isEmpty {
                     try Certificate.Extension(SubjectAlternativeNames(uris.map { .uniformResourceIdentifier($0) } + dnsNames.map { .dnsName($0) }), critical: criticalSAN)
                 }
                 if unknownCritical {

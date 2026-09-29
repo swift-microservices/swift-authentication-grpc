@@ -21,7 +21,7 @@ An authenticator answers one of three ways, and each has a fixed meaning on the 
 
 - **An identity** binds the principal, and the handler finds it in the `ServiceContext`.
 - **`nil`** declines, and the call continues with nothing bound. An application-specific authenticator can decline a credential it does not map.
-  SPIFFE verification instead refuses an unknown trust domain.
+  WorkloadCertificateAuthenticator instead refuses an unknown identity authority.
 - **A throw** refuses, and the call fails with `RPCError(code: .unauthenticated)` before the
   handler runs. A token with a bad signature or an expired claim is the usual case.
 
@@ -33,7 +33,7 @@ Requiring a caller is the handler's decision, made against the principal it read
 
 A service relaying a person's call arrives with its own certificate and the person's token. The
 two interceptors bind two principals under two keys, `PrincipalKey<AppToken, String>` and
-`PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>`, and neither touches the other. A handler can ask either
+`PrincipalKey<WorkloadIdentity, Certificate>`, and neither touches the other. A handler can ask either
 question: which process is calling, and on whose behalf.
 
 ## The same caller, onward
@@ -45,8 +45,11 @@ made outside any caller's request, startup work, a workflow activity, goes out u
 rather than failing: a process identifies itself on such calls with its certificate, which the
 transport presents at the handshake without any interceptor's help.
 
-## SPIFFE
+## Workload certificates
 
-Use the separate `AuthenticationSPIFFEGRPC` product for full X.509-SVID verification and
-required workload identity. It configures TLS with domain-specific trust and exact server-ID
-matching. Its interceptor requires validated chain context, never the leaf-only fallback.
+Use `CertificateAuthenticationInterceptor` from `AuthenticationGRPCNIOTransport` with
+`WorkloadCertificateAuthenticator` from `AuthenticationX509`, or an organization wrapper.
+Required native mTLS verifies the chain and key possession. Clients verify the configured server
+DNS name against explicit roots. The authenticator checks the caller's sole HTTPS URI SAN and leaf
+validity on each RPC. Protected handlers reject a missing principal; use cases authorize complete
+identities. No URI is fetched, and parsing a certificate alone is not authentication.

@@ -7,14 +7,11 @@ This package connects authentication to gRPC.
 - `AuthenticationGRPC`: transport-independent bearer authentication, propagation, and metadata.
 - `AuthenticationGRPCNIOTransport`: the generic certificate interceptor. An identity binds,
   nil continues anonymously, and a thrown error refuses authentication.
-- `AuthenticationSPIFFEGRPC`: SPIFFE TLS callbacks, exact server-ID matching, required peer
-  binding, and stateless verification against fixed trust bundles. It depends on AuthenticationSPIFFE;
-  the generic products do not. Cryptographic/profile verification stays in that package.
-- The SPIFFE interceptor requires verified TLS chain context and binds
-  `PrincipalKey<Identity, SPIFFEAuthenticator.Verification>`. It refuses missing/invalid peers.
-- Applications use standard certificate reloaders directly with gRPC mTLS. No issuer, custom
-  credential store, or workload-attestation service is implemented here. Peers validate SPIFFE
-  credentials; the standard loader only checks parsing and key matching.
+- Native required mTLS validates chains/key possession. Clients use full DNS verification and explicit roots.
+- WorkloadCertificateAuthenticator from AuthenticationX509 checks HTTPS caller identity and leaf validity.
+  It is a dependency of integration tests; the generic interceptor remains identity-agnostic.
+- Standard TimedCertificateReloader instances belong to the application's service group. External
+  automation owns issuance and renewal; no custom security state machine belongs here.
 - Policies and business permissions belong in application use cases. Never log private material.
 - Use real TLS integration tests for identity, rotation, and rejection behavior. Bound established
   connection lifetimes and document that already-running streams require shutdown/draining.
@@ -23,7 +20,7 @@ This package connects authentication to gRPC.
 
 - Swift 6.3, strict concurrency, `Sendable` everywhere it is meaningful.
 - Tests use Swift Testing and call `intercept` directly with a constructed request and context;
-  generic adapter tests need no transport. SPIFFE tests also start real local TLS transports. `Metadata.bearer` is proven by a table, the certificate interceptor
+  generic adapter tests need no transport. Workload tests also start real local TLS transports. `Metadata.bearer` is proven by a table, the certificate interceptor
   against certificates generated in memory over a constructed NIO transport context.
 - Doc comments on every public declaration; the DocC catalog is the long-form explanation.
 - Format with `swift-format format --in-place --recursive Sources Tests`; the soundness check on

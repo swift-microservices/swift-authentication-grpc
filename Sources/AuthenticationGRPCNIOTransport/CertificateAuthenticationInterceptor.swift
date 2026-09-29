@@ -18,8 +18,8 @@ public import X509
 /// is why this interceptor is its own product. A connection with no client certificate, or a
 /// certificate the authenticator declines, continues unbound. An authenticator can enforce
 /// additional identity checks; a throw fails the call as unauthenticated. Configure transport
-/// verification before using this generic adapter. For SPIFFE use AuthenticationSPIFFEGRPC,
-/// which integrates full SVID verification and requires validated chain context.
+/// verification before using this generic adapter. Use WorkloadCertificateAuthenticator from AuthenticationX509 for HTTPS workload URI identities.
+/// Protected handlers must reject an unbound principal.
 ///
 /// ```swift
 /// CertificateAuthenticationInterceptor(authenticator: ApplicationCertificateAuthenticator())
@@ -31,7 +31,7 @@ public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerIn
     private let authenticator: any Authenticator<Certificate, Identity>
 
     /// - Parameter authenticator: Names the peer from its certificate, using an application-defined certificate scheme.
-    ///   For SPIFFE, use the AuthenticationSPIFFEGRPC product instead.
+    ///   Configure required native mTLS before using certificate authentication.
     public init(authenticator: any Authenticator<Certificate, Identity>) {
         self.authenticator = authenticator
     }

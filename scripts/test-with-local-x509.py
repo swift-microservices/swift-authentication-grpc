@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test SPIFFE against its sibling checkout, restoring the tagged manifest."""
+"""Test X.509 against its sibling checkout, restoring the tagged manifest."""
 import fcntl
 import json
 import signal
@@ -15,21 +15,21 @@ def interrupted(signum, frame):
 signal.signal(signal.SIGTERM, interrupted)
 
 root = Path(__file__).resolve().parents[1]
-local = root.parent / "swift-authentication-spiffe"
+local = root.parent / "swift-authentication-x509"
 manifest = root / "Package.swift"
 if not (local / "Package.swift").is_file():
     sys.exit(f"Missing sibling package: {local}")
 (root / ".build").mkdir(exist_ok=True)
-with (root / ".build" / "local-spiffe-test.lock").open("w") as lock:
+with (root / ".build" / "local-x509-test.lock").open("w") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     original = manifest.read_bytes()
     dependency = (
         b'.package(url: "https://github.com/swift-microservices/'
-        b'swift-authentication-spiffe.git", from: "0.2.0")'
+        b'swift-authentication-x509.git", from: "0.3.0")'
     )
     if original.count(dependency) != 1:
         sys.exit(
-            "Expected exactly one tagged SPIFFE dependency; manifest left unchanged."
+            "Expected exactly one tagged X.509 dependency; manifest left unchanged."
         )
     replacement = (".package(path: " + json.dumps(str(local)) + ")").encode()
     patched = original.replace(dependency, replacement)
@@ -44,6 +44,6 @@ with (root / ".build" / "local-spiffe-test.lock").open("w") as lock:
         else:
             sys.stderr.write(
                 "Manifest changed during testing; preserving edits. "
-                "Restore the tagged SPIFFE dependency manually.\n"
+                "Restore the tagged X.509 dependency manually.\n"
             )
     sys.exit(result.returncode)
