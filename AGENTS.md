@@ -8,12 +8,13 @@ This package connects authentication to gRPC.
 - `AuthenticationGRPCNIOTransport`: the generic certificate interceptor. An identity binds,
   nil continues anonymously, and a thrown error refuses authentication.
 - `AuthenticationSPIFFEGRPC`: SPIFFE TLS callbacks, exact server-ID matching, required peer
-  binding, and validated atomic credential/trust updates. It depends on AuthenticationSPIFFE;
+  binding, and stateless verification against fixed trust bundles. It depends on AuthenticationSPIFFE;
   the generic products do not. Cryptographic/profile verification stays in that package.
 - The SPIFFE interceptor requires verified TLS chain context and binds
   `PrincipalKey<Identity, SPIFFEAuthenticator.Verification>`. It refuses missing/invalid peers.
-- An external provider supplies updates. No issuer or workload-attestation service is implemented
-  here. Validate updates before publishing; retain only the last still-valid snapshot on failure.
+- Applications use standard certificate reloaders directly with gRPC mTLS. No issuer, custom
+  credential store, or workload-attestation service is implemented here. Peers validate SPIFFE
+  credentials; the standard loader only checks parsing and key matching.
 - Policies and business permissions belong in application use cases. Never log private material.
 - Use real TLS integration tests for identity, rotation, and rejection behavior. Bound established
   connection lifetimes and document that already-running streams require shutdown/draining.

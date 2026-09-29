@@ -46,78 +46,74 @@ guard let caller = ServiceContext.current?[PrincipalKey<AppToken, String>.self]?
 
 ## SPIFFE workload authentication
 
+Use the standard gRPC mTLS API with a certificate reloader and a fixed SPIFFE authenticator:
+
 ```swift
 import AuthenticationSPIFFE
 import AuthenticationSPIFFEGRPC
 import GRPCNIOTransportHTTP2Posix
+import NIOCertificateReloading
 
-let security = try await SPIFFETransportSecurity(
-    certificateChain: localCertificates,
-    privateKey: localPrivateKey,
-    bundle: SPIFFETrustBundle(
-        trustDomain: "production.example.com",
-        authorities: trustedAuthorities
+let authenticator = SPIFFEAuthenticator(bundle: bundle)
+let reloader = try TimedCertificateReloader.makeReloaderValidatingSources(
+    configuration: .init(
+        refreshInterval: .seconds(60),
+        certificateSource: .init(location: .file(path: "/run/tls/chain.pem"), format: .pem),
+        privateKeySource: .init(location: .file(path: "/run/tls/key.pem"), format: .pem)
     )
 )
+let roots = TLSConfig.TrustRootsSource.certificates([
+    .file(path: "/run/tls/bundle.pem", format: .pem)
+])
+let serverSecurity = try HTTP2ServerTransport.Posix.TransportSecurity.mTLS(
+    certificateReloader: reloader
+) {
+    $0.trustRoots = roots
+    $0.requireALPN = true
+    $0.customVerificationCallback = authenticator.certificateVerificationCallback()
+}
+let interceptor = SPIFFEAuthenticationInterceptor(authenticator: authenticator)
 
-let transport = HTTP2ServerTransport.Posix(
-    address: .ipv4(host: "0.0.0.0", port: 50051),
-    transportSecurity: try security.serverTransportSecurity(),
-    config: SPIFFETransportSecurity.serverConfiguration
-)
-let interceptor = SPIFFEAuthenticationInterceptor(security: security)
-
-let usersSecurity = try security.clientTransportSecurity(
-    expectedServer: SPIFFEID(uri: "spiffe://production.example.com/users")
-)
-// Pass usersSecurity to the users client's Posix transport.
+let usersID = try SPIFFEID(uri: "spiffe://production.example.com/users")
+let clientSecurity = try HTTP2ClientTransport.Posix.TransportSecurity.mTLS(
+    certificateReloader: reloader
+) {
+    $0.trustRoots = roots
+    $0.serverCertificateVerification = .noHostnameVerification
+    $0.customVerificationCallback = authenticator.certificateVerificationCallback(expectedPeer: usersID)
+}
 ```
 
-Apply the interceptor to the protected services. It requires a TLS-validated peer chain,
-verifies it against current SPIFFE trust, and binds
-`PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>`. A project can provide
-`identity: { id in ServiceIdentity(spiffeID: id) }` to bind its own identity type. Neither
-verification nor mapping grants business permissions; use cases make those decisions.
+Construct `bundle` from explicit trusted authorities for your trust domain. Validate the initial
+local certificate chain, expected workload ID, key match, and sufficient remaining lifetime
+before starting transports. Add the reloader to the application's `ServiceGroup` alongside
+its servers, clients, and workers. Clients must supply the exact expected server SPIFFE ID;
+DNS addresses locate endpoints but do not authenticate SPIFFE identities.
 
-The server requires client certificates. Clients verify both the full chain and the exact
-expected SPIFFE ID; DNS addresses locate endpoints and are not used as SPIFFE identities.
-A missing chain or invalid peer fails as `unauthenticated`. User bearer principals are separate.
-Full verification runs at handshake and on request-cache misses, not for every request.
-The bounded cache expires with the chain and is invalidated on every trust update.
+The TLS callback validates the peer's complete chain and X.509-SVID profile and supplies
+verified chain metadata. The interceptor requires that metadata, revalidates the peer on
+every protected RPC, and binds `PrincipalKey<SPIFFEID, SPIFFEAuthenticator.Verification>`.
+Use `identity: ServiceIdentity.init(spiffeID:)` to bind a project identity. Authorization
+belongs in use cases; user bearer principals remain separate. There is no peer cache or
+shared mutable authentication state.
 
-### Renewal and revocation
+### Certificate renewal
 
-An external identity provider obtains short-lived SVIDs and trust bundles. After each update:
+An external issuer renews credentials. `TimedCertificateReloader` reads certificate/key files
+and supplies them directly to gRPC. Parsing or key-matching errors retain the last successfully
+loaded pair. The loader does not validate SPIFFE identity, trust, or expiry before publication:
+a parseable but invalid SVID can become the offered credential, and verifying peers reject it.
+Monitor issuer, load, handshake, and expiry failures; a successful load is not SPIFFE acceptance.
 
-```swift
-try await security.update(
-    certificateChain: renewedCertificates,
-    privateKey: renewedKey,
-    bundle: renewedBundle
-)
-```
+For routine leaf renewal, mount a stable credential directory and atomically replace the
+certificate file, preserving its key and trust bundle. Individual file bind mounts can retain
+old inodes. Coordinate private-key changes separately. Trust bundles are fixed for the lifetime
+of the authenticator; root changes require rebuilding the authenticator and transports.
 
-The adapter validates the chain and key match before atomically publishing the pair and bundle.
-An invalid update leaves the last valid snapshot intact. Concurrent updates are rejected;
-serialize the provider's update stream. A workload ID cannot change during renewal. New
-handshakes use renewed credentials without rebuilding the listener. Readiness is
-`security.isReady`; expired or revoked local material refuses new handshakes and protected RPCs.
-
-This product is the renewal **sink**, not a SPIRE Workload API client or an issuer. The provider
-integration owns attestation, fetching, renewal scheduling/backoff, and outage/expiry alerts.
-Keep that task in the application's structured lifecycle. File providers must publish a coherent
-certificate/key/bundle generation; never independently watch three partially replaced files.
-Expose time-to-expiry and renewal outcomes from the provider without logging private material.
-
-Use overlapping authorities during planned root rotation, renew all peers, then remove old
-roots. Removal is enforced on subsequent protected RPCs even on existing connections.
-`security.revoke()` refuses new handshakes and RPCs; restoring service requires a validated update.
-Existing streams and outgoing connections must also be drained or shut down by the application.
-TLS does not reauthenticate a connection simply because files or trust changed.
-
-`serverConfiguration` bounds connection age to five minutes and drain grace to thirty seconds.
-Choose smaller bounds when required by the credential lifetime or revocation objective, and set
-RPC deadlines. This is an operational bound, not a claim of instantaneous stream revocation.
+Set finite server connection age and drain grace (for example five minutes and thirty seconds)
+and RPC deadlines in the application. Reloading affects new handshakes; existing connections
+and in-flight streams are not reauthenticated. Protected RPCs recheck the calling peer's expiry,
+but this product supplies no local revocation switch or local-credential readiness service.
 
 ### Generic certificate identities
 

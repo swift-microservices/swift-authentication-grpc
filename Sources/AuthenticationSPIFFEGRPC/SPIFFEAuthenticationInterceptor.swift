@@ -14,21 +14,21 @@ import ServiceContextModule
 /// Requires a verified SPIFFE peer and binds its principal for this RPC.
 /// Business permissions remain in the application. No bearer principal is changed.
 public struct SPIFFEAuthenticationInterceptor<Identity: Sendable>: ServerInterceptor {
-    private let security: SPIFFETransportSecurity
+    private let authenticator: SPIFFEAuthenticator
     private let identity: @Sendable (SPIFFEID) throws -> Identity
 
     /// Maps a verified workload ID to a project's identity. Throw to refuse an unmapped peer.
-    public init(security: SPIFFETransportSecurity, identity: @escaping @Sendable (SPIFFEID) throws -> Identity) {
-        self.security = security
+    public init(authenticator: SPIFFEAuthenticator, identity: @escaping @Sendable (SPIFFEID) throws -> Identity) {
+        self.authenticator = authenticator
         self.identity = identity
     }
 
     /// Binds the verified peer's SPIFFE ID directly.
-    public init(security: SPIFFETransportSecurity) where Identity == SPIFFEID {
-        self.init(security: security, identity: { $0 })
+    public init(authenticator: SPIFFEAuthenticator) where Identity == SPIFFEID {
+        self.init(authenticator: authenticator, identity: { $0 })
     }
 
-    /// Requires TLS chain metadata and verifies it against the current trust snapshot.
+    /// Requires TLS chain metadata and verifies it against the configured trust bundle.
     public func intercept<Input: Sendable, Output: Sendable>(
         request: StreamingServerRequest<Input>,
         context: ServerContext,
@@ -40,7 +40,7 @@ public struct SPIFFEAuthenticationInterceptor<Identity: Sendable>: ServerInterce
         let verification: SPIFFEAuthenticator.Verification
         let peer: Identity
         do {
-            verification = try await security.peer(chain)
+            verification = try await authenticator.verify(certificateChain: Array(chain))
             peer = try identity(verification.id)
         } catch {
             throw RPCError(code: .unauthenticated, message: "SPIFFE authentication failed.")
