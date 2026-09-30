@@ -15,20 +15,16 @@ Both interceptors then do the same thing: apply the authenticator, and bind the 
 `Principal` in the task's `ServiceContext` for the length of the call, under a key made of the
 identity and the credential type.
 
-## Three answers, three outcomes
+## Authentication and binding
 
-An authenticator answers one of three ways, and each has a fixed meaning on the wire:
+`Authenticator.authenticate(_:)` returns an identity or throws. An identity binds the principal,
+and the handler finds it in the `ServiceContext`. A failure ends the call with
+`RPCError(code: .unauthenticated)` before the handler runs. This applies to both tokens and
+certificates: TLS validation and establishing an accepted identity are separate checks.
 
-- **An identity** binds the principal, and the handler finds it in the `ServiceContext`.
-- **`nil`** declines, and the call continues with nothing bound. A certificate from another
-  trust domain is the usual case: the transport already verified it, so the peer is real, it is
-  simply not one this service admits.
-- **A throw** refuses, and the call fails with `RPCError(code: .unauthenticated)` before the
-  handler runs. A token with a bad signature or an expired claim is the usual case.
-
-A call that carries no credential at all never reaches the authenticator and continues
-anonymously. Open RPCs need that: signing in mints the first token and has no caller yet.
-Requiring a caller is the handler's decision, made against the principal it reads.
+A call with no exposed credential never reaches the authenticator and continues anonymously.
+Open RPCs need that: signing in mints the first token and has no caller yet. Requiring a caller
+is the handler's decision, made against the principal it reads.
 
 ## Two principals on one call
 

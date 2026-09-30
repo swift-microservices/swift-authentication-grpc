@@ -15,10 +15,10 @@ public import X509
 ///
 /// The certificate is the one the peer presented at the TLS handshake, which the transport
 /// verified before the request was read. Only the NIO Posix HTTP/2 transport exposes it, which
-/// is why this interceptor is its own product. A connection with no client certificate, or a
-/// certificate the authenticator declines, continues unbound: the transport already refused
-/// every certificate that could be refused, and an unlisted peer is a valid one this service
-/// simply does not admit. An authenticator that throws fails the call as unauthenticated.
+/// is why this interceptor is its own product. A call with no exposed client certificate
+/// continues unbound. The authenticator returns an accepted identity or throws; a failure
+/// ends the call as unauthenticated before the handler runs. TLS certificate validation and
+/// establishing an accepted identity are separate checks.
 ///
 /// ```swift
 /// CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
@@ -51,9 +51,7 @@ public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerIn
             return try await next(request, context)
         }
 
-        guard let identity = try await authenticate(certificate) else {
-            return try await next(request, context)
-        }
+        let identity = try await authenticate(certificate)
 
         var serviceContext = ServiceContext.current ?? .topLevel
         serviceContext[PrincipalKey<Identity, Certificate>.self] = Principal(identity: identity, credential: certificate)
@@ -63,7 +61,7 @@ public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerIn
         }
     }
 
-    private func authenticate(_ certificate: Certificate) async throws -> Identity? {
+    private func authenticate(_ certificate: Certificate) async throws -> Identity {
         do {
             return try await authenticator.authenticate(certificate)
         } catch {

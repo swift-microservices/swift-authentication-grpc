@@ -4,7 +4,7 @@ Binding who is calling on gRPC: a bearer token or the peer's certificate on the 
 same token on the way out.
 
 ```swift
-.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.2.0"),
+.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.3.0"),
 ```
 
 | Product | Depends on | For |
@@ -13,9 +13,10 @@ same token on the way out.
 | `AuthenticationGRPCNIOTransport` | grpc-swift-nio-transport, swift-certificates | the certificate interceptor; needs the NIO Posix HTTP/2 transport, the only one that exposes the peer certificate |
 
 Both take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
-shape: an `Authenticator<Credential, Identity>` proves a credential, declines it with `nil`, or
-refuses it by throwing. The interceptors read the credential off the call and bind the result as
-a `Principal` in the task's `ServiceContext` for the length of the call.
+contract: `Authenticator<Credential, Identity>.authenticate(_:)` returns an identity or throws.
+The interceptors read the credential off the call and bind the identity and credential as a
+`Principal` in the task's `ServiceContext` for the length of the call. A failed authentication
+ends the call with `RPCError(code: .unauthenticated)` before the handler runs.
 
 ## Binding a caller from a token
 
@@ -32,8 +33,8 @@ GRPCServer(
 ```
 
 A call with no token continues anonymously, which is what an open RPC needs: signing in mints the
-first token and has no caller yet. A token the authenticator declines continues unbound. A token
-it refuses fails the call as unauthenticated, because absent and invalid are not the same thing.
+first token and has no caller yet. A presented token must authenticate successfully; a failure
+ends the call as unauthenticated before the handler runs.
 
 Requiring a caller is the handler's decision:
 
@@ -51,9 +52,10 @@ import AuthenticationGRPCNIOTransport
 CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
 ```
 
-The transport verified the certificate at the handshake; the authenticator reads who it names.
-A connection with no client certificate, or one the authenticator declines, continues unbound: an
-unlisted peer is a valid one this service simply does not admit. The principal is bound under
+The transport validates the certificate at the handshake; the authenticator establishes an
+accepted identity. A call with no exposed client certificate continues unbound. A presented
+certificate must authenticate successfully; a failure ends the call as unauthenticated before
+the handler runs. The principal is bound under
 `PrincipalKey<SPIFFEID, Certificate>`, separately from any bearer principal, because a service
 relaying a person's call arrives with its own certificate and the person's token.
 

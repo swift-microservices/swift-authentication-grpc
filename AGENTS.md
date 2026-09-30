@@ -12,9 +12,9 @@ This package binds principals on gRPC. Read this before changing anything.
 - The interceptors take any `Authenticator` from swift-authentication and never know which
   credential format is in use. They read the credential off the call, apply the authenticator,
   and bind a `Principal` under `PrincipalKey<Identity, Credential>`.
-- The three answers are honoured exactly: an identity binds, `nil` continues unbound, a throw
-  fails the call with `RPCError(code: .unauthenticated)`. A call with no credential never
-  reaches the authenticator.
+- Authentication returns an identity or throws. An identity binds; a failure ends the call
+  with `RPCError(code: .unauthenticated)` before the handler runs. A call with no exposed
+  credential never reaches the authenticator and continues unbound.
 - Interceptors never require a caller. That is the handler's decision.
 
 ## What does not belong here

@@ -7,18 +7,21 @@
 
 import Authentication
 
-/// An authenticator over a table: a known credential proves its identity, an unknown one is
-/// declined, and a credential in the refused set throws.
+/// An authenticator over a table: known credentials prove their identities; unknown or
+/// refused credentials throw.
 struct TableAuthenticator<Credential: Hashable & Sendable, Identity: Sendable>: Authenticator {
     struct Refused: Error {}
 
     let identities: [Credential: Identity]
     var refused: Set<Credential> = []
 
-    func authenticate(_ credential: Credential) throws -> Identity? {
+    func authenticate(_ credential: Credential) throws -> Identity {
         if refused.contains(credential) {
             throw Refused()
         }
-        return identities[credential]
+        guard let identity = identities[credential] else {
+            throw Refused()
+        }
+        return identity
     }
 }
