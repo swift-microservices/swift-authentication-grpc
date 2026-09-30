@@ -1,6 +1,7 @@
 # ``AuthenticationGRPC``
 
-Binding who is calling on gRPC: a bearer token on the way in, and the same token on the way out.
+Binding who is calling on gRPC: a bearer token on the way in, and a propagated or supplied token
+on the way out.
 
 ## Overview
 
@@ -8,8 +9,8 @@ Binding who is calling on gRPC: a bearer token on the way in, and the same token
 `Authenticator<String, Identity>` from swift-authentication, and binds the
 `Principal<Identity, String>` in the task's `ServiceContext` for the length of the call.
 ``BearerPropagationInterceptor`` reads that principal back and presents its token on an outgoing
-call, so one token identifies the caller at every service in the chain. Both work on any
-transport, because they read metadata alone.
+call. ``BearerCredentialsInterceptor`` presents a token supplied by an async closure for a
+service or worker acting on its own behalf. All three work on any transport through metadata.
 
 The certificate side, binding the peer a client certificate proves, needs the NIO Posix HTTP/2
 transport, which is the only one that exposes the certificate. It is the separate product
@@ -53,6 +54,7 @@ CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDom
 ### Client
 
 - ``BearerPropagationInterceptor``
+- ``BearerCredentialsInterceptor``
 
 ### Metadata
 

@@ -5,24 +5,34 @@ This package binds principals on gRPC. Read this before changing anything.
 ## What this package is
 
 - Two products. `AuthenticationGRPC` holds `BearerAuthenticationInterceptor`,
-  `BearerPropagationInterceptor`, and `Metadata.bearer`, and depends on grpc-swift-2 alone, so it
+  `BearerPropagationInterceptor`, `BearerCredentialsInterceptor`, and `Metadata.bearer`, so it
   works on any transport. `AuthenticationGRPCNIOTransport` holds
   `CertificateAuthenticationInterceptor` and depends on the NIO Posix HTTP/2 transport and
   swift-certificates, because only that transport exposes the peer certificate.
-- The interceptors take any `Authenticator` from swift-authentication and never know which
+- The server interceptors take any `Authenticator` from swift-authentication and never know which
   credential format is in use. They read the credential off the call, apply the authenticator,
   and bind a `Principal` under `PrincipalKey<Identity, Credential>`.
 - Authentication returns an identity or throws. An identity binds; a failure ends the call
   with `RPCError(code: .unauthenticated)` before the handler runs. A call with no exposed
   credential never reaches the authenticator and continues unbound.
-- Interceptors never require a caller. That is the handler's decision.
+- Server interceptors identify without requiring a caller. That is the handler's decision.
+- `BearerCredentialsInterceptor` presents a token supplied by an async `@Sendable` closure on
+  each interception, independently of any inbound principal. Apply it only to the RPC services
+  accepting that token. It replaces authorization metadata and propagates acquisition failures
+  and cancellation before calling `next`; an empty token or whitespace is unauthenticated.
+- `BearerPropagationInterceptor` forwards the inbound caller's token. Configure propagation and
+  supplied credentials on separate service descriptors so one call has one bearer identity.
+- Internal connections use mandatory mTLS. A service JWT identifies the application caller;
+  receiving services validate its issuer, audience, expiration, and purpose, and use cases
+  decide permissions. An ordinary bearer token is not bound to the TLS certificate.
 
 ## What does not belong here
 
 - Authorization. Roles and permissions are the application's.
 - A credential format. Proofs are swift-authentication-jwt and swift-authentication-x509.
-- A process credential for outgoing calls. `BearerPropagationInterceptor` forwards the inbound
-  caller's token and nothing else; a process identifies itself with its certificate.
+- Credential issuance protocols, token endpoints, acquisition, caching, renewal, and signing-key
+  management. Those belong to the issuer and authentication client supplied by the application.
+- Application workload names, token claims, audience values, and permission policies.
 
 ## Swift
 

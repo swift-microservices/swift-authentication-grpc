@@ -36,8 +36,43 @@ question: which process is calling, and on whose behalf.
 ## The same caller, onward
 
 ``BearerPropagationInterceptor`` reads the bearer principal and puts its token back on an
-outgoing call, so one token identifies the caller at every service in the chain. It is applied
-to the upstream services that take a token, so a public service is dialled with nothing. A call
-made outside any caller's request, startup work, a workflow activity, goes out unauthenticated
-rather than failing: a process identifies itself on such calls with its certificate, which the
-transport presents at the handshake without any interceptor's help.
+outgoing call. It is applied to the upstream services that accept that caller's token, so a
+public service is dialled with nothing. A call made outside any caller's request has no token
+to propagate and continues without one.
+
+## A service or worker as the caller
+
+``BearerCredentialsInterceptor`` obtains a token from an async `@Sendable` closure and presents
+it as the call's sole authorization entry. The closure is invoked on each interception and
+may be called concurrently. It owns acquisition, caching, and renewal; the interceptor holds
+no credential state and reads or binds no principal. Acquisition failures and cancellation
+propagate before calling `next`. An empty token or one containing whitespace fails as
+unauthenticated, so a required credential cannot silently become an anonymous call.
+
+```swift
+GRPCClient(transport: mtlsTransport, interceptorPipeline: [
+    .apply(
+        BearerCredentialsInterceptor {
+            try await authenticationClient.accessToken(for: "users-internal")
+        },
+        to: .services([UserInternalService.descriptor])
+    )
+])
+```
+
+The authentication client belongs to the application and obtains credentials from a trusted
+issuer. Apply supplied credentials and user-token propagation to separate service descriptors
+so the call has one intended bearer identity. Receiver-side
+``BearerAuthenticationInterceptor`` accepts an `Authenticator<String, ServiceIdentity>` in
+the same way it accepts a user authenticator. The application validates issuer, audience,
+expiration, and service-token purpose, requires the bound identity in internal handlers, and
+checks permissions in the owning use case before side effects.
+
+Mandatory mTLS protects and authenticates the internal connection. An ordinary bearer token
+does not prove that the presenting certificate belongs to the token's subject. A
+certificate-bound token requires a separate binding check. Certificate rotation and token
+renewal have independent lifecycles for ordinary bearer tokens.
+
+A workflow carries durable business input. Its Activities call remote services through the
+worker's credential-configured client, obtaining a valid token at execution time. Access
+tokens stay outside workflow inputs, Activity results, and recorded workflow history.

@@ -1,7 +1,7 @@
 # swift-authentication-grpc
 
-Binding who is calling on gRPC: a bearer token or the peer's certificate on the way in, and the
-same token on the way out.
+Binding who is calling on gRPC: a bearer token or the peer's certificate on the way in, and a
+propagated or supplied bearer token on the way out.
 
 ```swift
 .package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.3.0"),
@@ -12,7 +12,7 @@ same token on the way out.
 | `AuthenticationGRPC` | grpc-swift-2 | the bearer interceptors and `Metadata.bearer`; any transport |
 | `AuthenticationGRPCNIOTransport` | grpc-swift-nio-transport, swift-certificates | the certificate interceptor; needs the NIO Posix HTTP/2 transport, the only one that exposes the peer certificate |
 
-Both take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
+The server interceptors take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
 contract: `Authenticator<Credential, Identity>.authenticate(_:)` returns an identity or throws.
 The interceptors read the credential off the call and bind the identity and credential as a
 `Principal` in the task's `ServiceContext` for the length of the call. A failed authentication
@@ -68,10 +68,44 @@ GRPCClient(transport: transport, interceptorPipeline: [
 ```
 
 The propagation interceptor reads the bearer principal and puts its token back on the outgoing
-call, so one token identifies the caller at every service in the chain. Apply it to the upstream
-services that take a token, so a public service is dialled with nothing. Calls made outside a
-caller's request, startup work, a workflow activity, go out unauthenticated rather than failing;
-a process identifies itself on such calls with its certificate, not a token.
+call. Apply it to the upstream services that accept that caller's token, so a public service is
+dialled with nothing. Calls made outside a caller's request have no token to propagate and
+continue without one.
+
+## Calling as a service or worker
+
+Supply a bearer token through an async closure, applied only to the internal RPC services that
+accept it:
+
+```swift
+let credentials = BearerCredentialsInterceptor {
+    try await authenticationClient.accessToken(for: "users-internal")
+}
+
+GRPCClient(transport: mtlsTransport, interceptorPipeline: [
+    .apply(credentials, to: .services([UserInternalService.descriptor]))
+])
+```
+
+`authenticationClient` is the application's token client. It obtains, caches, and renews a
+short-lived service access token from a trusted issuer. The interceptor calls the closure on
+each interception, replaces authorization metadata with the supplied token, and presents it
+independently of any inbound principal. The closure may be called concurrently. Acquisition
+failures and cancellation propagate before the next interceptor runs; an empty token or a
+token containing whitespace fails as unauthenticated. There is no token cache or renewal task
+inside the interceptor.
+
+Use `JWTAuthenticator<ServiceIdentity>` and `BearerAuthenticationInterceptor` at the receiver,
+where `ServiceIdentity` is the application's `JWTPayload`. Configure the application's token
+verification to enforce the expected issuer, audience, expiration, and service-token purpose.
+Internal handlers require the bound identity, and owning use cases check permissions before
+side effects. Configure
+supplied credentials and user-token propagation on separate service descriptors.
+
+Internal connections retain mandatory mTLS. An ordinary bearer JWT is independent of the
+client certificate; certificate-bound tokens require an additional binding check. During a
+Temporal Activity, obtain credentials in the outgoing client path. Keep access tokens outside
+workflow inputs, Activity results, and workflow history.
 
 ## Testing a handler
 
