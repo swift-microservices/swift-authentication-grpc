@@ -31,7 +31,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.2.0"),
+        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.3.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.20.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.3.0"),

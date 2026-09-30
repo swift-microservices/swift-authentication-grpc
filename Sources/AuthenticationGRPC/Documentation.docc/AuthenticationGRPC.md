@@ -16,6 +16,10 @@ transport, which is the only one that exposes the certificate. It is the separat
 `AuthenticationGRPCNIOTransport`, so a service that admits only tokens links neither the
 transport nor swift-certificates through this package.
 
+Authentication returns an identity or throws. A missing credential continues anonymously;
+a failed authentication ends the call with `RPCError(code: .unauthenticated)` before the
+handler runs.
+
 ## Example
 
 ```swift

@@ -12,9 +12,8 @@ import ServiceContextModule
 /// Binds the principal a bearer token proves, for the length of the call.
 ///
 /// The token is read from the request's `authorization` metadata. A call with no token continues
-/// anonymously, which is what an open RPC needs. A token the authenticator declines continues
-/// unbound. A token the authenticator refuses fails the call as unauthenticated, because absent
-/// and invalid are not the same thing.
+/// anonymously, which is what an open RPC needs. The authenticator returns an identity or
+/// throws. A failed authentication ends the call as unauthenticated before the handler runs.
 ///
 /// Apply it to the services whose RPCs take a token:
 ///
@@ -56,9 +55,7 @@ public struct BearerAuthenticationInterceptor<Identity: Sendable>: ServerInterce
             return try await next(request, context)
         }
 
-        guard let identity = try await authenticate(token) else {
-            return try await next(request, context)
-        }
+        let identity = try await authenticate(token)
 
         var serviceContext = ServiceContext.current ?? .topLevel
         serviceContext[PrincipalKey<Identity, String>.self] = Principal(identity: identity, credential: token)
@@ -68,7 +65,7 @@ public struct BearerAuthenticationInterceptor<Identity: Sendable>: ServerInterce
         }
     }
 
-    private func authenticate(_ token: String) async throws -> Identity? {
+    private func authenticate(_ token: String) async throws -> Identity {
         do {
             return try await authenticator.authenticate(token)
         } catch {

@@ -22,7 +22,7 @@ struct BearerAuthenticationInterceptorTests {
     )
 
     /// Runs the interceptor and returns the principal the handler saw, or `nil`.
-    func principalSeen(withAuthorization authorization: String?) async throws -> Principal<Claims, String>? {
+    func principalSeen(withAuthorization authorization: String?, handlerCalls: Seen<Bool> = Seen(), contextSeen: Seen<ServiceContext> = Seen()) async throws -> Principal<Claims, String>? {
         var metadata = Metadata()
         if let authorization {
             metadata.addString(authorization, forKey: "authorization")
@@ -32,6 +32,8 @@ struct BearerAuthenticationInterceptorTests {
 
         let seen = Seen<Principal<Claims, String>?>()
         _ = try await interceptor.intercept(request: request, context: context) { _, _ -> StreamingServerResponse<String> in
+            await handlerCalls.record(true)
+            await contextSeen.record(ServiceContext.current ?? .topLevel)
             await seen.record(ServiceContext.current?[PrincipalKey<Claims, String>.self])
             return StreamingServerResponse(metadata: [:]) { _ in [:] }
         }
@@ -40,28 +42,50 @@ struct BearerAuthenticationInterceptorTests {
 
     @Test("A call with no token continues anonymously")
     func noTokenContinuesAnonymously() async throws {
-        #expect(try await principalSeen(withAuthorization: nil) == nil)
+        let calls = Seen<Bool>()
+        #expect(try await principalSeen(withAuthorization: nil, handlerCalls: calls) == nil)
+        #expect(await calls.value == true)
     }
 
     @Test("A proved token binds its principal for the handler")
     func provedTokenBindsPrincipal() async throws {
-        let principal = try await principalSeen(withAuthorization: "Bearer alice-token")
+        let calls = Seen<Bool>()
+        let principal = try await principalSeen(withAuthorization: "Bearer alice-token", handlerCalls: calls)
+        #expect(await calls.value == true)
 
         #expect(principal?.identity == Claims(subject: "alice"))
         #expect(principal?.credential == "alice-token")
     }
 
-    @Test("A declined token continues unbound")
-    func declinedTokenContinuesUnbound() async throws {
-        #expect(try await principalSeen(withAuthorization: "Bearer unknown-token") == nil)
-    }
-
-    @Test("A refused token fails the call as unauthenticated before the handler runs")
-    func refusedTokenIsUnauthenticated() async throws {
+    @Test("A failed token is unauthenticated before the handler runs", arguments: ["unknown-token", "expired-token"])
+    func failedTokenIsUnauthenticated(token: String) async throws {
+        let calls = Seen<Bool>()
         await #expect {
-            try await principalSeen(withAuthorization: "Bearer expired-token")
+            try await principalSeen(withAuthorization: "Bearer \(token)", handlerCalls: calls)
         } throws: { error in
             (error as? RPCError)?.code == .unauthenticated
+        }
+        #expect(await calls.value == nil)
+    }
+
+    enum TraceKey: ServiceContextKey {
+        typealias Value = String
+    }
+
+    @Test("The bearer binding preserves context values and restores the enclosing principal")
+    func bindingIsScoped() async throws {
+        let outer = Principal(identity: Claims(subject: "outer"), credential: "outer-token")
+        var context = ServiceContext.topLevel
+        context[TraceKey.self] = "trace-1"
+        context[PrincipalKey<Claims, String>.self] = outer
+        let seen = Seen<ServiceContext>()
+
+        try await ServiceContext.withValue(context) {
+            let principal = try await principalSeen(withAuthorization: "Bearer alice-token", contextSeen: seen)
+            #expect(principal?.identity.subject == "alice")
+            #expect(await seen.value?[TraceKey.self] == "trace-1")
+            #expect(ServiceContext.current?[PrincipalKey<Claims, String>.self]?.identity == outer.identity)
+            #expect(ServiceContext.current?[PrincipalKey<Claims, String>.self]?.credential == outer.credential)
         }
     }
 }
