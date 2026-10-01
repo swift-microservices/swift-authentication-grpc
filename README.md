@@ -1,83 +1,90 @@
 # swift-authentication-grpc
 
-Binding who is calling on gRPC: a bearer token or the peer's certificate on the way in, and the
-same token on the way out.
+User bearer authentication and propagation for gRPC, with mandatory transport mTLS between
+services.
 
 ```swift
 .package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.3.0"),
 ```
 
-| Product | Depends on | For |
+```swift
+.product(name: "AuthenticationGRPC", package: "swift-authentication-grpc"),
+```
+
+`AuthenticationGRPC` provides `BearerAuthenticationInterceptor`, `BearerPropagationInterceptor`,
+and `Metadata.bearer` over grpc-swift-2. Bearer authentication works on any transport.
+
+## Security model
+
+mTLS secures service-to-service connections. JWTs additionally authenticate users making these
+calls. Use separate protobuf descriptors for public, user, and internal operations:
+
+| Audience | Application authentication | Handler and use case |
 | --- | --- | --- |
-| `AuthenticationGRPC` | grpc-swift-2 | the bearer interceptors and `Metadata.bearer`; any transport |
-| `AuthenticationGRPCNIOTransport` | grpc-swift-nio-transport, swift-certificates | the certificate interceptor; needs the NIO Posix HTTP/2 transport, the only one that exposes the peer certificate |
+| Public | Operation-specific credentials or proofs, such as a password or verification challenge | Enforces the operation's business rules |
+| User or administrator | Original user JWT, verified by the receiving service | Requires the user identity and checks permissions and resource access |
+| Internal service or worker | The transport authenticates the peer through mTLS | Accepts business input directly and enforces business invariants |
 
-Both take their authenticators from [swift-authentication](https://github.com/swift-microservices/swift-authentication)'s
-contract: `Authenticator<Credential, Identity>.authenticate(_:)` returns an identity or throws.
-The interceptors read the credential off the call and bind the identity and credential as a
-`Principal` in the task's `ServiceContext` for the length of the call. A failed authentication
-ends the call with `RPCError(code: .unauthenticated)` before the handler runs.
+Every peer admitted by the listener's CA trust can call its internal RPCs. Keep listeners private
+and gateway routes limited to intended public and user operations. User principals and database
+settings are scoped to user descriptors.
 
-## Binding a caller from a token
+## Authenticate user RPCs
 
 ```swift
-let authenticator = JWTAuthenticator<AppToken>(keys: keys)
+let authenticator = JWTAuthenticator<UserIdentity>(keys: keys)
 
-GRPCServer(
+let server = GRPCServer(
     transport: transport,
-    services: [service],
+    services: [publicService, userService, internalService],
     interceptorPipeline: [
-        .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([Service.descriptor]))
+        .apply(
+            BearerAuthenticationInterceptor(authenticator: authenticator),
+            to: .services([UserService.descriptor])
+        )
     ]
 )
 ```
 
-A call with no token continues anonymously, which is what an open RPC needs: signing in mints the
-first token and has no caller yet. A presented token must authenticate successfully; a failure
-ends the call as unauthenticated before the handler runs.
+`Authenticator.authenticate(_:)` returns an identity or throws. A verified token binds a
+`Principal<UserIdentity, String>` in `ServiceContext` for the length of the call. An invalid token
+ends the call with `RPCError(code: .unauthenticated)` before the handler runs.
 
-Requiring a caller is the handler's decision:
+A missing token continues unbound. Each user handler requires its identity before invoking the
+owning use case, which checks user permissions before side effects:
 
 ```swift
-guard let caller = ServiceContext.current?[PrincipalKey<AppToken, String>.self]?.identity else {
+guard let user = ServiceContext.current?[PrincipalKey<UserIdentity, String>.self]?.identity else {
     throw RPCError(code: .unauthenticated, message: "Sign in to continue.")
 }
 ```
 
-## Binding a peer from its certificate
+## Forward the original user JWT
 
 ```swift
-import AuthenticationGRPCNIOTransport
-
-CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
-```
-
-The transport validates the certificate at the handshake; the authenticator establishes an
-accepted identity. A call with no exposed client certificate continues unbound. A presented
-certificate must authenticate successfully; a failure ends the call as unauthenticated before
-the handler runs. The principal is bound under
-`PrincipalKey<SPIFFEID, Certificate>`, separately from any bearer principal, because a service
-relaying a person's call arrives with its own certificate and the person's token.
-
-## Calling onward as the same caller
-
-```swift
-GRPCClient(transport: transport, interceptorPipeline: [
-    .apply(BearerPropagationInterceptor<AppToken>(), to: .services([UpstreamService.descriptor]))
+let client = GRPCClient(transport: transport, interceptorPipeline: [
+    .apply(
+        BearerPropagationInterceptor<UserIdentity>(),
+        to: .services([UpstreamUserService.descriptor])
+    )
 ])
 ```
 
-The propagation interceptor reads the bearer principal and puts its token back on the outgoing
-call, so one token identifies the caller at every service in the chain. Apply it to the upstream
-services that take a token, so a public service is dialled with nothing. Calls made outside a
-caller's request, startup work, a workflow activity, go out unauthenticated rather than failing;
-a process identifies itself on such calls with its certificate, not a token.
+The interceptor forwards the original credential unchanged. Each receiving service verifies its
+signature and claims independently. Apply propagation only to user descriptors.
+
+## Certificate lifecycle
+
+Composition roots use a primed `TimedCertificateReloader` with
+`.mTLS(certificateReloader: reloader)` and run it alongside transports in `ServiceGroup`.
+Deployment provisioning renews the mounted files. See [Mutual TLS and certificate renewal](Sources/AuthenticationGRPC/Documentation.docc/Articles/MutualTLSAndCertificateRenewal.md)
+for client/server configuration and renewal operations.
 
 ## Testing a handler
 
-`Authenticator` is a one-method protocol, so a handler test conforms a dictionary to it and sends
-`Bearer admin-token` without minting a key. The interceptors themselves are tested the same way
-here, by calling `intercept` directly with a constructed request and context.
+`Authenticator` is a one-method protocol, so handler tests can supply a small authenticator
+without generating a signing key. Interceptor tests call `intercept` directly with a constructed
+request and context. Verify transport mTLS and certificate renewal with real TLS handshakes.
 
 ## Requirements
 
@@ -87,7 +94,7 @@ Swift 6.3, macOS 15 or Linux.
 
 ```sh
 swift test
-swift-format lint --strict --recursive Sources Tests    # what the soundness check runs
+swift-format lint --strict --recursive Sources Tests
 ```
 
 ## Contributing

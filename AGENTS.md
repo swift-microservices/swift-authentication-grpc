@@ -4,25 +4,33 @@ This package binds principals on gRPC. Read this before changing anything.
 
 ## What this package is
 
-- Two products. `AuthenticationGRPC` holds `BearerAuthenticationInterceptor`,
-  `BearerPropagationInterceptor`, and `Metadata.bearer`, and depends on grpc-swift-2 alone, so it
-  works on any transport. `AuthenticationGRPCNIOTransport` holds
-  `CertificateAuthenticationInterceptor` and depends on the NIO Posix HTTP/2 transport and
-  swift-certificates, because only that transport exposes the peer certificate.
-- The interceptors take any `Authenticator` from swift-authentication and never know which
-  credential format is in use. They read the credential off the call, apply the authenticator,
-  and bind a `Principal` under `PrincipalKey<Identity, Credential>`.
-- Authentication returns an identity or throws. An identity binds; a failure ends the call
-  with `RPCError(code: .unauthenticated)` before the handler runs. A call with no exposed
-  credential never reaches the authenticator and continues unbound.
-- Interceptors never require a caller. That is the handler's decision.
+- `AuthenticationGRPC` provides `BearerAuthenticationInterceptor`,
+  `BearerPropagationInterceptor`, and `Metadata.bearer` over grpc-swift-2, on any transport.
+  `AuthenticationGRPCNIOTransport` provides `CertificateAuthenticationInterceptor` over the
+  NIO Posix HTTP/2 transport for applications that explicitly bind certificate credentials.
+- Authenticators return a concrete identity or throw. Server interceptors bind successful
+  identities under `PrincipalKey<Identity, Credential>`, translate failures to
+  `RPCError(code: .unauthenticated)`, and continue unbound when no credential is exposed.
+- Public, user, and internal protobuf service descriptors are separate. Scope user bearer
+  authentication, propagation, and user database settings to user descriptors. User handlers
+  require an identity; owning use cases check user permissions and resource access.
+- Forward the original user JWT unchanged. Each receiving service verifies it independently.
+- Every backend listener and outgoing service/worker connection requires transport mTLS.
+  Internal handlers accept business input directly and enforce business invariants. Every peer
+  admitted by the listener's explicit CA trust can call its internal RPCs.
+- Keep listeners private and gateway routes limited to intended public and user operations.
+  Public operations retain their required credentials and proofs.
+- Composition roots prime `TimedCertificateReloader` with `makeReloaderValidatingSources`,
+  pass it to `.mTLS(certificateReloader:)`, configure explicit trusted roots and full server
+  hostname verification, and run it with transports in `ServiceGroup`. Deployment provisioning
+  owns renewal on disk; the reloader reads renewed files for new handshakes.
 
 ## What does not belong here
 
-- Authorization. Roles and permissions are the application's.
-- A credential format. Proofs are swift-authentication-jwt and swift-authentication-x509.
-- A process credential for outgoing calls. `BearerPropagationInterceptor` forwards the inbound
-  caller's token and nothing else; a process identifies itself with its certificate.
+- Authorization policies, workload permission lists, or application token claims.
+- JWT issuance and verification implementation; swift-authentication-jwt owns those adapters.
+- Certificate issuance, renewal daemons, and deployment secrets. Document their transport
+  lifecycle in the DocC guide without adding them to the bearer interceptor API.
 
 ## Swift
 

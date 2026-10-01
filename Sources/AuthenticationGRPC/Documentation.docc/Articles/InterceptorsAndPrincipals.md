@@ -1,43 +1,49 @@
 # Interceptors and principals
 
-Where a credential is read, what each of an authenticator's answers becomes on the wire, and
-how one caller stays one caller across a chain of services.
+Authenticate users and forward their original credential between user RPCs.
 
-## Reading the credential is the transport's job
+## RPC audiences
 
-An `Authenticator` proves a credential it is handed. Finding that credential on a call is the
-transport's job, and it differs by credential. A bearer token is in the `authorization`
-metadata, which every transport carries, so ``BearerAuthenticationInterceptor`` works on any of
-them. A client certificate is on the connection, and only the NIO Posix HTTP/2 transport exposes
-it, so `CertificateAuthenticationInterceptor` lives in its own product over that transport.
+mTLS secures service-to-service connections. JWTs additionally authenticate users making these
+calls. Use separate public, user, and internal protobuf descriptors; scope bearer authentication,
+propagation, and user database settings to user descriptors. Keep backend listeners private and
+gateway routes limited to intended public and user operations.
 
-Both interceptors then do the same thing: apply the authenticator, and bind the result as a
-`Principal` in the task's `ServiceContext` for the length of the call, under a key made of the
-identity and the credential type.
+Public operations validate their required credentials or proofs. Every peer admitted by an
+internal listener's CA trust can call its internal RPCs. Internal operations accept business
+input and enforce resource relationships, state transitions, consistency, and idempotency.
 
-## Authentication and binding
+## Authenticate the user
 
-`Authenticator.authenticate(_:)` returns an identity or throws. An identity binds the principal,
-and the handler finds it in the `ServiceContext`. A failure ends the call with
-`RPCError(code: .unauthenticated)` before the handler runs. This applies to both tokens and
-certificates: TLS validation and establishing an accepted identity are separate checks.
+``BearerAuthenticationInterceptor`` reads `authorization` metadata and calls
+`Authenticator.authenticate(_:)`. A successful return binds the identity and original token as
+`Principal<UserIdentity, String>` in `ServiceContext` for the call. Verification failure returns
+`RPCError(code: .unauthenticated)` before the handler runs.
 
-A call with no exposed credential never reaches the authenticator and continues anonymously.
-Open RPCs need that: signing in mints the first token and has no caller yet. Requiring a caller
-is the handler's decision, made against the principal it reads.
+A missing token continues unbound. The user handler requires the identity and passes it to the
+owning use case, which checks permissions and resource access before side effects.
 
-## Two principals on one call
+## Forward the original JWT
 
-A service relaying a person's call arrives with its own certificate and the person's token. The
-two interceptors bind two principals under two keys, `PrincipalKey<AppToken, String>` and
-`PrincipalKey<SPIFFEID, Certificate>`, and neither touches the other. A handler can ask either
-question: which process is calling, and on whose behalf.
+Scope ``BearerPropagationInterceptor`` to upstream user descriptors:
 
-## The same caller, onward
+```swift
+let client = GRPCClient(transport: transport, interceptorPipeline: [
+    .apply(
+        BearerPropagationInterceptor<UserIdentity>(),
+        to: .services([UpstreamUserService.descriptor])
+    )
+])
+```
 
-``BearerPropagationInterceptor`` reads the bearer principal and puts its token back on an
-outgoing call, so one token identifies the caller at every service in the chain. It is applied
-to the upstream services that take a token, so a public service is dialled with nothing. A call
-made outside any caller's request, startup work, a workflow activity, goes out unauthenticated
-rather than failing: a process identifies itself on such calls with its certificate, which the
-transport presents at the handshake without any interceptor's help.
+The interceptor presents the original credential unchanged, replacing existing authorization
+metadata when a user principal is present. Without a principal, it leaves the request unchanged.
+Each receiving service verifies the original JWT independently.
+
+## Worker operations
+
+Workers call their own Core operations locally and other services through internal RPCs. A
+user-triggered workflow is authorized when the initiating request is accepted; its Activities
+validate durable business state when they execute. User IDs in workflow input identify resources.
+
+See <doc:MutualTLSAndCertificateRenewal> for transport configuration and lifecycle management.

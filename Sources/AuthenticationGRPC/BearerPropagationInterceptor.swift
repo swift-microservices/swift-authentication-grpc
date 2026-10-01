@@ -12,19 +12,19 @@ import ServiceContextModule
 /// Presents the caller's bearer token on an outgoing call, so one token identifies the caller at
 /// every service in the chain.
 ///
-/// It reads the principal ``BearerAuthenticationInterceptor`` bound and puts its credential back
-/// on the request. Apply it to the upstream services that take a token, so a public service is
-/// dialled with nothing:
+/// It reads the principal ``BearerAuthenticationInterceptor`` bound and presents the original
+/// credential unchanged. Each receiving service verifies that JWT independently. Apply it only
+/// to upstream user service descriptors:
 ///
 /// ```swift
 /// GRPCClient(transport: transport, interceptorPipeline: [
-///     .apply(BearerPropagationInterceptor<AppToken>(), to: .services([UpstreamService.descriptor]))
+///     .apply(BearerPropagationInterceptor<UserIdentity>(), to: .services([UpstreamUserService.descriptor]))
 /// ])
 /// ```
 ///
-/// Calls made outside a caller's request, startup work, a workflow activity, anything with no
-/// inbound token, go out unauthenticated rather than failing here. A process that must identify
-/// itself on such calls needs a credential of its own, which this interceptor does not provide.
+/// With no bound user principal, the request is passed through unchanged. Internal service and
+/// worker clients use mandatory mTLS, with the transport presenting their certificate at the
+/// handshake. Public operations supply their operation-specific proofs.
 public struct BearerPropagationInterceptor<Identity: Sendable>: ClientInterceptor {
     public init() {}
 

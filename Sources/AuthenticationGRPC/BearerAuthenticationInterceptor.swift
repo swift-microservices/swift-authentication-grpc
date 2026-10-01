@@ -11,26 +11,27 @@ import ServiceContextModule
 
 /// Binds the principal a bearer token proves, for the length of the call.
 ///
-/// The token is read from the request's `authorization` metadata. A call with no token continues
-/// anonymously, which is what an open RPC needs. The authenticator returns an identity or
-/// throws. A failed authentication ends the call as unauthenticated before the handler runs.
+/// The token is read from the request's `authorization` metadata. The authenticator returns an
+/// identity or throws. A failed authentication ends the call as unauthenticated before the
+/// handler runs. A missing token continues unbound; user handlers require their identity.
 ///
-/// Apply it to the services whose RPCs take a token:
+/// Apply it only to user service descriptors. Public operations check their own required proofs,
+/// and internal operations accept business input over mandatory transport mTLS:
 ///
 /// ```swift
 /// GRPCServer(
 ///     transport: transport,
 ///     services: [service],
 ///     interceptorPipeline: [
-///         .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([Service.descriptor]))
+///         .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([UserService.descriptor]))
 ///     ]
 /// )
 /// ```
 ///
-/// Requiring a caller is the handler's decision:
+/// A user handler requires its identity before invoking the owning use case:
 ///
 /// ```swift
-/// guard let caller = ServiceContext.current?[PrincipalKey<AppToken, String>.self]?.identity else {
+/// guard let caller = ServiceContext.current?[PrincipalKey<UserIdentity, String>.self]?.identity else {
 ///     throw RPCError(code: .unauthenticated, message: "Sign in to continue.")
 /// }
 /// ```

@@ -21,16 +21,16 @@ public import X509
 /// establishing an accepted identity are separate checks.
 ///
 /// ```swift
-/// CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
+/// CertificateAuthenticationInterceptor(authenticator: certificateAuthenticator)
 /// ```
 ///
-/// A call can carry both a certificate and a token, a service relaying a person's call, so this
-/// binds under `PrincipalKey<Identity, Certificate>` and never touches the bearer principal.
+/// Binds under `PrincipalKey<Identity, Certificate>` independently of bearer principals.
+/// Internal RPC authentication is provided by mandatory mTLS in the transport configuration;
+/// those handlers accept business input directly.
 public struct CertificateAuthenticationInterceptor<Identity: Sendable>: ServerInterceptor {
     private let authenticator: any Authenticator<Certificate, Identity>
 
-    /// - Parameter authenticator: Names the peer from its certificate, such as a
-    ///   `SPIFFEAuthenticator`.
+    /// - Parameter authenticator: Establishes the application identity from the certificate.
     public init(authenticator: any Authenticator<Certificate, Identity>) {
         self.authenticator = authenticator
     }
