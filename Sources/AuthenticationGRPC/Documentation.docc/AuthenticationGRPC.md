@@ -1,48 +1,46 @@
 # ``AuthenticationGRPC``
 
-Binding who is calling on gRPC: a bearer token on the way in, and the same token on the way out.
+Authenticate user JWTs and forward the original token on user RPCs.
 
 ## Overview
 
-``BearerAuthenticationInterceptor`` reads the `authorization` metadata, proves the token with an
-`Authenticator<String, Identity>` from swift-authentication, and binds the
-`Principal<Identity, String>` in the task's `ServiceContext` for the length of the call.
-``BearerPropagationInterceptor`` reads that principal back and presents its token on an outgoing
-call, so one token identifies the caller at every service in the chain. Both work on any
-transport, because they read metadata alone.
+``BearerAuthenticationInterceptor`` reads the `authorization` metadata, verifies the token with
+an `Authenticator<String, Identity>`, and binds a `Principal<Identity, String>` in the task's
+`ServiceContext` for the call. ``BearerPropagationInterceptor`` presents that principal's
+original token on an outgoing user RPC. Each receiving service verifies it independently.
+Both interceptors work on any gRPC transport.
 
-The certificate side, binding the peer a client certificate proves, needs the NIO Posix HTTP/2
-transport, which is the only one that exposes the certificate. It is the separate product
-`AuthenticationGRPCNIOTransport`, so a service that admits only tokens links neither the
-transport nor swift-certificates through this package.
+Use separate public, user, and internal protobuf service descriptors. Apply bearer authentication
+and propagation only to user descriptors. A missing token continues unbound; user handlers
+require an identity, and their owning use cases check permissions and resource access. A failed
+authentication ends the call with `RPCError(code: .unauthenticated)` before the handler runs.
 
-Authentication returns an identity or throws. A missing credential continues anonymously;
-a failed authentication ends the call with `RPCError(code: .unauthenticated)` before the
-handler runs.
+mTLS secures service connections. User JWTs provide user authentication, and owning use cases
+check permissions. Internal handlers accept business input and enforce domain invariants.
 
 ## Example
 
 ```swift
-GRPCServer(
+let server = GRPCServer(
     transport: transport,
-    services: [service],
+    services: [publicService, userService, internalService],
     interceptorPipeline: [
-        .apply(BearerAuthenticationInterceptor(authenticator: authenticator), to: .services([Service.descriptor]))
+        .apply(
+            BearerAuthenticationInterceptor(authenticator: authenticator),
+            to: .services([UserService.descriptor])
+        )
     ]
 )
 
-GRPCClient(transport: transport, interceptorPipeline: [
-    .apply(BearerPropagationInterceptor<AppToken>(), to: .services([UpstreamService.descriptor]))
+let client = GRPCClient(transport: transport, interceptorPipeline: [
+    .apply(
+        BearerPropagationInterceptor<UserIdentity>(),
+        to: .services([UpstreamUserService.descriptor])
+    )
 ])
 ```
 
-Over the NIO transport, the peer's certificate is bound the same way:
-
-```swift
-import AuthenticationGRPCNIOTransport
-
-CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDomain: "example"))
-```
+Configure the client and server transports using <doc:MutualTLSAndCertificateRenewal>.
 
 ## Topics
 
@@ -58,6 +56,7 @@ CertificateAuthenticationInterceptor(authenticator: SPIFFEAuthenticator(trustDom
 
 - ``GRPCCore/Metadata/bearer``
 
-### Design
+### Guides
 
 - <doc:InterceptorsAndPrincipals>
+- <doc:MutualTLSAndCertificateRenewal>
