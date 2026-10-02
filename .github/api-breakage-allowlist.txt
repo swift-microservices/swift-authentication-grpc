@@ -1,2 +1,0 @@
-API breakage: func BearerAuthenticationInterceptor.intercept(request:context:next:) is now with nonisolated
-API breakage: func BearerPropagationInterceptor.intercept(request:context:next:) is now with nonisolated
