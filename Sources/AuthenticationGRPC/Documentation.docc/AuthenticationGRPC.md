@@ -60,3 +60,4 @@ Configure the client and server transports using <doc:MutualTLSAndCertificateRen
 
 - <doc:InterceptorsAndPrincipals>
 - <doc:MutualTLSAndCertificateRenewal>
+- <doc:ConfiguringTransportCredentials>
