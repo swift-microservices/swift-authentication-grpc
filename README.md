@@ -75,10 +75,10 @@ signature and claims independently. Apply propagation only to user descriptors.
 
 ## Certificate lifecycle
 
-Composition roots use a primed `TimedCertificateReloader` with
+Composition roots use a primed `TimedCertificateReloader` from `NIOCertificateReloading` with
 `.mTLS(certificateReloader: reloader)` and run it alongside transports in `ServiceGroup`.
 Deployment provisioning renews the mounted files. See [Mutual TLS and certificate renewal](Sources/AuthenticationGRPC/Documentation.docc/Articles/MutualTLSAndCertificateRenewal.md)
-for client/server configuration and renewal operations.
+for client/server configuration and renewal operations, and [Configuring transport credentials](Sources/AuthenticationGRPC/Documentation.docc/Articles/ConfiguringTransportCredentials.md) for scoped readers and application defaults.
 
 ## Testing a handler
 

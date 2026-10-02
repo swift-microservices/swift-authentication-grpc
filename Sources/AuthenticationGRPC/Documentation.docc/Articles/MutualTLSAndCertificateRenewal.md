@@ -12,6 +12,7 @@ and destination hostnames at clients. Keep backend listeners private.
 The composition root configures transports and runs the certificate reloader. Deployment
 provisioning issues and renews certificates. The examples use grpc-swift-nio-transport 2.10.0,
 swift-nio-extras 1.35.1, grpc-swift-extras 2.2.1, and swift-service-lifecycle 2.12.0.
+For environment overrides and reusable configuration adapters, see <doc:ConfiguringTransportCredentials>.
 
 ## Provision the certificate directory
 
@@ -44,7 +45,7 @@ import NIOCertificateReloading
 import ServiceLifecycle
 
 let logger = Logger(label: "service.transport")
-let configuration = TimedCertificateReloader.Configuration(
+var configuration = TimedCertificateReloader.Configuration(
     refreshInterval: .seconds(60),
     certificateSource: .init(
         location: .file(path: "/run/tls/cert.pem"),
@@ -54,14 +55,10 @@ let configuration = TimedCertificateReloader.Configuration(
         location: .file(path: "/run/tls/key.pem"),
         format: .pem
     )
-) {
-    $0.logger = logger
-    $0.onCertificateLoaded = { _ in
-        logger.info("TLS certificate loaded")
-    }
-    $0.onCertificateLoadFailed = { failure in
-        logger.error("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])
-    }
+)
+configuration.logger = logger
+configuration.onCertificateLoadFailed = { failure in
+    logger.warning("TLS certificate reload failed", metadata: ["error": "\(failure.error)"])
 }
 let reloader = try TimedCertificateReloader.makeReloaderValidatingSources(
     configuration: configuration
@@ -98,7 +95,7 @@ let serverTransport = HTTP2ServerTransport.Posix(
         $0.clientCertificateVerification = .noHostnameVerification
     },
     config: .defaults {
-        $0.connection.maxAge = .seconds(3600)
+        $0.connection.maxAge = .seconds(300)
         $0.connection.maxGraceTime = .seconds(30)
     }
 )
@@ -128,8 +125,11 @@ interceptors as described in <doc:InterceptorsAndPrincipals>.
 
 ## Renew certificates on disk
 
-Use an environment-specific `step-ca` and a `smallstep/step-cli` renewer companion for each
-workload's directory. Pin images to reviewed versions or digests. Run the renewer in the
+Use Smallstep’s `step-ca` and a `smallstep/step-cli` renewer companion for each workload’s
+directory. In Dokploy, the CA can run privately in the project housing the services, with
+separate CA trust and state per environment. Persist the CA configuration and database, protect
+the online intermediate key, and keep the root signing key offline. Each renewer writes only
+its workload’s directory, which the application mounts read-only. Pin images to reviewed versions or digests. Run the renewer in the
 foreground with a restart policy:
 
 ```sh
@@ -146,8 +146,8 @@ interval, and an alert below four hours remaining. Validate these values against
 requirements. See the [Smallstep renewal command](https://smallstep.com/docs/step-cli/reference/ca/renew/).
 
 Publish complete PEM files through staged output and atomic replacement on the actual directory
-mount. Verify the pinned renewer's behavior. Key rotation requires coordinated publication of a
-validated pair; independently replacing two files is not atomic. Failed reloads retain the last
+mount. Verify the pinned renewer's behavior. Use [`step ca rekey`](https://smallstep.com/docs/step-cli/reference/ca/rekey/) to rotate the private key.
+Key rotation requires coordinated publication of a validated pair; independently replacing two files is not atomic. Failed reloads retain the last
 usable pair and retry at the configured interval.
 
 Monitor reload failures, renewal success, and remaining lifetime. Define readiness and graceful
@@ -157,8 +157,10 @@ trust roots separately with overlap and a tested transport rebuild or rolling re
 
 ## Temporal connections
 
-Swift Temporal clients use the same primed reloader, explicit CA roots, and full server
-verification, running alongside the worker in `ServiceGroup`. The Temporal server uses its own
+Swift Temporal clients use a dedicated certificate/key pair under `/run/temporal-tls`, scoped
+as `temporal.tls`, with independent trust and a separate primed reloader. Reuse the configuration
+adapters, not the service credentials. Run both reloaders alongside the clients or worker in
+`ServiceGroup`, with explicit CA roots and full server hostname verification. The Temporal server uses its own
 version-specific certificate loading facilities. Configure frontend and internode mTLS and
 include enabled supporting endpoints in the deployment's transport configuration. Test native
 refresh behavior or use rolling restarts within the renewal window. See the

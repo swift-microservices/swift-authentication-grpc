@@ -6,8 +6,6 @@ This package binds principals on gRPC. Read this before changing anything.
 
 - `AuthenticationGRPC` provides `BearerAuthenticationInterceptor`,
   `BearerPropagationInterceptor`, and `Metadata.bearer` over grpc-swift-2, on any transport.
-  `AuthenticationGRPCNIOTransport` provides `CertificateAuthenticationInterceptor` over the
-  NIO Posix HTTP/2 transport for applications that explicitly bind certificate credentials.
 - Authenticators return a concrete identity or throw. Server interceptors bind successful
   identities under `PrincipalKey<Identity, Credential>`, translate failures to
   `RPCError(code: .unauthenticated)`, and continue unbound when no credential is exposed.
@@ -36,8 +34,8 @@ This package binds principals on gRPC. Read this before changing anything.
 
 - Swift 6.3, strict concurrency, `Sendable` everywhere it is meaningful.
 - Tests use Swift Testing and call `intercept` directly with a constructed request and context;
-  no transport is started. `Metadata.bearer` is proven by a table, the certificate interceptor
-  against certificates generated in memory over a constructed NIO transport context.
+  no transport is started. `Metadata.bearer` is proven by a table. Real transport admission and
+  certificate renewal belong to application integration tests.
 - Doc comments on every public declaration; the DocC catalog is the long-form explanation.
 - Format with `swift-format format --in-place --recursive Sources Tests`; the soundness check on
   every pull request runs the same rules, an API breakage check against the base branch, and
