@@ -1,5 +1,7 @@
 # swift-authentication-grpc
 
+[![Documentation](https://img.shields.io/badge/docc-read_documentation-blue)](https://swiftpackageindex.com/swift-microservices/swift-authentication-grpc/documentation)
+
 User bearer authentication and propagation for gRPC, with mandatory transport mTLS between
 services.
 
