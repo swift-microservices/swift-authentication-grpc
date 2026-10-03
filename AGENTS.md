@@ -62,9 +62,12 @@ This package binds principals on gRPC. Read this before changing anything.
   Automatic API-breakage checking is disabled by project choice; SemVer labels still describe
   the public API impact. The docs workflow adds the DocC plugin only in its temporary checkout.
 - PRs and main pushes run Linux tests on Swift 6.3 and 6.4, next/main snapshots, release builds,
-  and static Linux SDK checks. CI has no scheduled runs. Require supported stable checks in
-  branch protection; snapshot failures remain visible and advisory unless maintainers
+  and x86_64/ARM64 static Linux SDK builds. CI has no scheduled runs. Require supported stable
+  checks in branch protection; snapshot failures remain visible and advisory unless maintainers
   explicitly require them.
+- Static SDK checks cross-compile only; they do not run ARM64 tests. Serialize ARM64 after
+  x86_64 because SwiftNIO shares their concurrency group; run it even after x86_64 failure
+  unless the workflow was canceled.
 - CI is Linux-only by project choice. macOS and other Apple-platform builds/tests are
   outside this pipeline; Linux success does not establish Apple-platform compatibility.
 - Shared library workflows and the SwiftNIO SemVer action follow `@main` by project choice.
@@ -74,5 +77,5 @@ This package binds principals on gRPC. Read this before changing anything.
 - Use the three-line MIT header matched by `.license_header_template`. Keep the tools-version
   directive first in `Package.swift`, followed by that header. `.licenseignore` excludes the
   manifest (the upstream checker requires a header at line one) and the plain-text `LICENSE`.
-- Keep the separate Foundation-linking consumer check; a successful static SDK build
-  does not prove that the resolved graph avoids full Foundation.
+- Keep the separate Foundation-linking consumer check on Swift 6.3 and 6.4 Noble; a successful
+  static SDK build does not prove that the resolved graph avoids full Foundation.
