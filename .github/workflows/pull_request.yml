@@ -30,17 +30,6 @@ jobs:
   static-sdk:
     name: Static Linux Swift SDK
     uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
-    with:
-      command_arguments: "--swift-sdk x86_64-swift-linux-musl"
-
-  # SwiftNIO shares a concurrency group across static SDK calls.
-  static-sdk-arm64:
-    name: Static Linux Swift SDK ARM64
-    needs: static-sdk
-    if: ${{ !cancelled() }}
-    uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
-    with:
-      command_arguments: "--swift-sdk aarch64-swift-linux-musl"
 
   release-builds:
     name: Release builds
