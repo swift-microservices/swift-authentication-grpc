@@ -1,9 +1,6 @@
-//
-//  BearerPropagationInterceptor.swift
-//  swift-authentication-grpc
-//
-//  Created by Zaid Rahhawi on 9/11/26.
-//
+// Copyright (c) 2026 Zaid Rahhawi
+// SPDX-License-Identifier: MIT
+// See LICENSE for license information.
 
 import Authentication
 public import GRPCCore
