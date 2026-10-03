@@ -14,24 +14,29 @@ jobs:
     with:
       # Files carry the author header, not a license block; the LICENSE file is the license.
       license_header_check_enabled: false
-      # Documentation is built without the docc plugin, so the manifest stays dependency-free.
-      docs_check_enabled: false
+      docs_check_targets: "AuthenticationGRPC"
 
   unit-tests:
     name: Unit tests
-    uses: apple/swift-nio/.github/workflows/unit_tests.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
+    uses: apple/swift-nio/.github/workflows/unit_tests.yml@d09ffc8ad6437bc278897279e33150d8e39ee3d5  # main as of 2026-10-03; includes Swift 6.4 inputs
     with:
+      minimum_swift_version: "6.3"
+      linux_6_2_enabled: false
       linux_6_3_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
+      linux_6_4_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
       linux_nightly_next_arguments_override: "--explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
       linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
 
   static-sdk:
     name: Static Linux Swift SDK
-    uses: apple/swift-nio/.github/workflows/static_sdk.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
+    uses: apple/swift-nio/.github/workflows/static_sdk.yml@d09ffc8ad6437bc278897279e33150d8e39ee3d5  # main as of 2026-10-03; includes Swift 6.4 inputs
 
   release-builds:
     name: Release builds
-    uses: apple/swift-nio/.github/workflows/release_builds.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
+    uses: apple/swift-nio/.github/workflows/release_builds.yml@d09ffc8ad6437bc278897279e33150d8e39ee3d5  # main as of 2026-10-03; includes Swift 6.4 inputs
+    with:
+      minimum_swift_version: "6.3"
+      linux_6_2_enabled: false
 
   foundation-linking:
     name: Foundation linking

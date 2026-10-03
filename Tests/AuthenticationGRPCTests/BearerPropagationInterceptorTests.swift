@@ -22,7 +22,11 @@ struct BearerPropagationInterceptorTests {
     /// Runs the interceptor and returns the authorization the outgoing request carried.
     func outgoingAuthorization() async throws -> [String] {
         let request = StreamingClientRequest<String>(metadata: [:]) { _ in }
-        let context = ClientContext(descriptor: .init(fullyQualifiedService: "test.Service", method: "Call"), remotePeer: "server", localPeer: "client")
+        let context = ClientContext(
+            descriptor: .init(fullyQualifiedService: "test.Service", method: "Call"),
+            remotePeer: "server",
+            localPeer: "client"
+        )
 
         let seen = Seen<[String]>()
         _ = try await interceptor.intercept(request: request, context: context) { request, _ -> StreamingClientResponse<String> in
