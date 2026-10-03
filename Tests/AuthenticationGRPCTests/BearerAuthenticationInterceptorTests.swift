@@ -1,9 +1,6 @@
-//
-//  BearerAuthenticationInterceptorTests.swift
-//  swift-authentication-grpc
-//
-//  Created by Zaid Rahhawi on 9/11/26.
-//
+// Copyright (c) 2026 Zaid Rahhawi
+// SPDX-License-Identifier: MIT
+// See LICENSE for license information.
 
 import Authentication
 import AuthenticationGRPC
@@ -22,13 +19,22 @@ struct BearerAuthenticationInterceptorTests {
     )
 
     /// Runs the interceptor and returns the principal the handler saw, or `nil`.
-    func principalSeen(withAuthorization authorization: String?, handlerCalls: Seen<Bool> = Seen(), contextSeen: Seen<ServiceContext> = Seen()) async throws -> Principal<Claims, String>? {
+    func principalSeen(
+        withAuthorization authorization: String?,
+        handlerCalls: Seen<Bool> = Seen(),
+        contextSeen: Seen<ServiceContext> = Seen()
+    ) async throws -> Principal<Claims, String>? {
         var metadata = Metadata()
         if let authorization {
             metadata.addString(authorization, forKey: "authorization")
         }
         let request = StreamingServerRequest<String>(metadata: metadata, messages: RPCAsyncSequence(wrapping: AsyncThrowingStream { $0.finish() }))
-        let context = ServerContext(descriptor: .init(fullyQualifiedService: "test.Service", method: "Call"), remotePeer: "client", localPeer: "server", cancellation: .init())
+        let context = ServerContext(
+            descriptor: .init(fullyQualifiedService: "test.Service", method: "Call"),
+            remotePeer: "client",
+            localPeer: "server",
+            cancellation: .init()
+        )
 
         let seen = Seen<Principal<Claims, String>?>()
         _ = try await interceptor.intercept(request: request, context: context) { _, _ -> StreamingServerResponse<String> in

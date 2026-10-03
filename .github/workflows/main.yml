@@ -6,28 +6,34 @@ permissions:
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "0 8 * * 1"
 
 jobs:
   unit-tests:
     name: Unit tests
-    uses: apple/swift-nio/.github/workflows/unit_tests.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
+    uses: apple/swift-nio/.github/workflows/unit_tests.yml@main
     with:
+      minimum_swift_version: "6.3"
+      linux_6_2_enabled: false
       linux_6_3_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
+      linux_6_4_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
       linux_nightly_next_arguments_override: "--explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
       linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error -Xswiftc -require-explicit-sendable"
 
-  static-sdk:
-    name: Static Linux Swift SDK
-    uses: apple/swift-nio/.github/workflows/static_sdk.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
-
   release-builds:
     name: Release builds
-    uses: apple/swift-nio/.github/workflows/release_builds.yml@21de5f08c1a166a6dd293d0e587ad977bf8dac5d  # 2.103.0
+    uses: apple/swift-nio/.github/workflows/release_builds.yml@main
+    with:
+      minimum_swift_version: "6.3"
+      linux_6_2_enabled: false
 
   foundation-linking:
     name: Foundation linking
-    uses: vapor/ci/.github/workflows/check-foundation-linking.yml@ad78413e13bebb9158083aa226608e028754106b  # main as of 2026-09-23
+    uses: vapor/ci/.github/workflows/check-foundation-linking.yml@main
     with:
       swift_image: swift:6.3-noble
+
+  foundation-linking-swift64:
+    name: Foundation linking Swift 6.4
+    uses: vapor/ci/.github/workflows/check-foundation-linking.yml@main
+    with:
+      swift_image: swift:6.4-noble
