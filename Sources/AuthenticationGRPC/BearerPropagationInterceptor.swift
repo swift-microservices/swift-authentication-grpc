@@ -23,8 +23,10 @@ import ServiceContextModule
 /// worker clients use mandatory mTLS, with the transport presenting their certificate at the
 /// handshake. Public operations supply their operation-specific proofs.
 public struct BearerPropagationInterceptor<Identity: Sendable>: ClientInterceptor {
+    /// An interceptor that forwards the bound principal's credential.
     public init() {}
 
+    /// Presents the bound principal's original token on the outgoing request, if one is bound.
     public func intercept<Input: Sendable, Output: Sendable>(
         request: StreamingClientRequest<Input>,
         context: ClientContext,
