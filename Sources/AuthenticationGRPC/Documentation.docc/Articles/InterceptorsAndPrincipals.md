@@ -40,10 +40,4 @@ The interceptor presents the original credential unchanged, replacing existing a
 metadata when a user principal is present. Without a principal, it leaves the request unchanged.
 Each receiving service verifies the original JWT independently.
 
-## Worker operations
-
-Workers call their own Core operations locally and other services through internal RPCs. A
-user-triggered workflow is authorized when the initiating request is accepted; its Activities
-validate durable business state when they execute. User IDs in workflow input identify resources.
-
 See <doc:MutualTLSAndCertificateRenewal> for transport configuration and lifecycle management.

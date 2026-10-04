@@ -35,11 +35,14 @@ import ServiceContextModule
 public struct BearerAuthenticationInterceptor<Identity: Sendable>: ServerInterceptor {
     private let authenticator: any Authenticator<String, Identity>
 
+    /// An interceptor that proves bearer tokens with `authenticator`.
+    ///
     /// - Parameter authenticator: Proves the token, such as a `JWTAuthenticator`.
     public init(authenticator: any Authenticator<String, Identity>) {
         self.authenticator = authenticator
     }
 
+    /// Authenticates the call's bearer token, if it has one, and runs `next` with the principal bound.
     public func intercept<Input: Sendable, Output: Sendable>(
         request: StreamingServerRequest<Input>,
         context: ServerContext,

@@ -11,7 +11,7 @@ and destination hostnames at clients. Keep backend listeners private.
 
 The composition root configures transports and runs the certificate reloader. Deployment
 provisioning issues and renews certificates. The examples use grpc-swift-nio-transport 2.10.0,
-swift-nio-extras 1.35.1, grpc-swift-extras 2.2.1, and swift-service-lifecycle 2.12.0.
+swift-nio-extras 1.35.1, grpc-swift-extras 2.2.0, and swift-service-lifecycle 2.11.0 or later.
 For environment overrides and reusable configuration adapters, see <doc:ConfiguringTransportCredentials>.
 
 ## Provision the certificate directory
@@ -125,12 +125,12 @@ interceptors as described in <doc:InterceptorsAndPrincipals>.
 
 ## Renew certificates on disk
 
-Use Smallstep’s `step-ca` and a `smallstep/step-cli` renewer companion for each workload’s
-directory. In Dokploy, the CA can run privately in the project housing the services, with
-separate CA trust and state per environment. Persist the CA configuration and database, protect
-the online intermediate key, and keep the root signing key offline. Each renewer writes only
-its workload’s directory, which the application mounts read-only. Pin images to reviewed versions or digests. Run the renewer in the
-foreground with a restart policy:
+Renewal is the deployment's job, not the application's. With Smallstep's `step-ca`, for
+example, a `smallstep/step-cli` renewer companion runs beside each workload, with a private CA
+and separate trust and state per environment. Persist the CA configuration and database,
+protect the online intermediate key, and keep the root signing key offline. Each renewer writes
+only its workload's directory, which the application mounts read-only. Pin images to reviewed
+versions or digests, and run the renewer in the foreground with a restart policy:
 
 ```sh
 step ca renew /run/tls/cert.pem /run/tls/key.pem \
@@ -146,25 +146,21 @@ interval, and an alert below four hours remaining. Validate these values against
 requirements. See the [Smallstep renewal command](https://smallstep.com/docs/step-cli/reference/ca/renew/).
 
 Publish complete PEM files through staged output and atomic replacement on the actual directory
-mount. Verify the pinned renewer's behavior. Use [`step ca rekey`](https://smallstep.com/docs/step-cli/reference/ca/rekey/) to rotate the private key.
-Key rotation requires coordinated publication of a validated pair; independently replacing two files is not atomic. Failed reloads retain the last
-usable pair and retry at the configured interval.
+mount, and verify the pinned renewer's behavior. Rotate the private key with
+[`step ca rekey`](https://smallstep.com/docs/step-cli/reference/ca/rekey/); key rotation requires
+coordinated publication of a validated pair, because independently replacing two files is not
+atomic. Failed reloads retain the last usable pair and retry at the configured interval.
 
 Monitor reload failures, renewal success, and remaining lifetime. Define readiness and graceful
 shutdown before the usable certificate expires. CA outages allow continued use of valid loaded
 material while renewal retries; recovery after expiry requires controlled enrollment. Rotate
 trust roots separately with overlap and a tested transport rebuild or rolling restart.
 
-## Temporal connections
+## Other mTLS clients
 
-Swift Temporal clients use a dedicated certificate/key pair under `/run/temporal-tls`, scoped
-as `temporal.tls`, with independent trust and a separate primed reloader. Reuse the configuration
-adapters, not the service credentials. Run both reloaders alongside the clients or worker in
-`ServiceGroup`, with explicit CA roots and full server hostname verification. The Temporal server uses its own
-version-specific certificate loading facilities. Configure frontend and internode mTLS and
-include enabled supporting endpoints in the deployment's transport configuration. Test native
-refresh behavior or use rolling restarts within the renewal window. See the
-[Swift Temporal connection guide](https://swiftpackageindex.com/apple/swift-temporal-sdk/main/documentation/temporal/connecting-to-temporal).
+A client of another system with its own trust, such as a Temporal client, uses a separate
+certificate/key pair, its own configuration scope, and its own primed reloader, run in the same
+`ServiceGroup`. Reuse the configuration adapters, not the service credentials.
 
 ## Verify renewal
 
