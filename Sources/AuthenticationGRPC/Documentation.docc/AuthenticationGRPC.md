@@ -6,7 +6,7 @@ Authenticate user JWTs and forward the original token on user RPCs.
 
 ``BearerAuthenticationInterceptor`` reads the `authorization` metadata, verifies the token with
 an `Authenticator<String, Identity>`, and binds a `Principal<Identity, String>` in the task's
-`ServiceContext` for the call. ``BearerPropagationInterceptor`` presents that principal's
+`OperationContext` for the call. ``BearerPropagationInterceptor`` presents that principal's
 original token on an outgoing user RPC. Each receiving service verifies it independently.
 Both interceptors work on any gRPC transport.
 

@@ -4,7 +4,7 @@
 
 public import Authentication
 public import GRPCCore
-import ServiceContextModule
+import OperationContext
 
 /// Binds the principal a bearer token proves, for the length of the call.
 ///
@@ -28,7 +28,7 @@ import ServiceContextModule
 /// A user handler requires its identity before invoking the owning use case:
 ///
 /// ```swift
-/// guard let caller = ServiceContext.current?[PrincipalKey<UserIdentity, String>.self]?.identity else {
+/// guard let caller = OperationContext.current[PrincipalKey<UserIdentity, String>.self]?.identity else {
 ///     throw RPCError(code: .unauthenticated, message: "Sign in to continue.")
 /// }
 /// ```
@@ -58,10 +58,10 @@ public struct BearerAuthenticationInterceptor<Identity: Sendable>: ServerInterce
 
         let identity = try await authenticate(token)
 
-        var serviceContext = ServiceContext.current ?? .topLevel
-        serviceContext[PrincipalKey<Identity, String>.self] = Principal(identity: identity, credential: token)
+        var operationContext = OperationContext.current
+        operationContext[PrincipalKey<Identity, String>.self] = Principal(identity: identity, credential: token)
 
-        return try await ServiceContext.withValue(serviceContext) {
+        return try await OperationContext.withContext(operationContext) {
             try await next(request, context)
         }
     }

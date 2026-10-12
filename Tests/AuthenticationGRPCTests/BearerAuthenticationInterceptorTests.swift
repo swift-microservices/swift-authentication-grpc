@@ -5,7 +5,7 @@
 import Authentication
 import AuthenticationGRPC
 import GRPCCore
-import ServiceContextModule
+import OperationContext
 import Testing
 
 @Suite
@@ -22,7 +22,7 @@ struct BearerAuthenticationInterceptorTests {
     func principalSeen(
         withAuthorization authorization: String?,
         handlerCalls: Seen<Bool> = Seen(),
-        contextSeen: Seen<ServiceContext> = Seen()
+        contextSeen: Seen<OperationContext> = Seen()
     ) async throws -> Principal<Claims, String>? {
         var metadata = Metadata()
         if let authorization {
@@ -39,8 +39,8 @@ struct BearerAuthenticationInterceptorTests {
         let seen = Seen<Principal<Claims, String>?>()
         _ = try await interceptor.intercept(request: request, context: context) { _, _ -> StreamingServerResponse<String> in
             await handlerCalls.record(true)
-            await contextSeen.record(ServiceContext.current ?? .topLevel)
-            await seen.record(ServiceContext.current?[PrincipalKey<Claims, String>.self])
+            await contextSeen.record(OperationContext.current)
+            await seen.record(OperationContext.current[PrincipalKey<Claims, String>.self])
             return StreamingServerResponse(metadata: [:]) { _ in [:] }
         }
         return await seen.value ?? nil
@@ -74,24 +74,24 @@ struct BearerAuthenticationInterceptorTests {
         #expect(await calls.value == nil)
     }
 
-    enum TraceKey: ServiceContextKey {
+    enum RequestIDKey: OperationContextKey {
         typealias Value = String
     }
 
     @Test("The bearer binding preserves context values and restores the enclosing principal")
     func bindingIsScoped() async throws {
         let outer = Principal(identity: Claims(subject: "outer"), credential: "outer-token")
-        var context = ServiceContext.topLevel
-        context[TraceKey.self] = "trace-1"
+        var context = OperationContext()
+        context[RequestIDKey.self] = "request-1"
         context[PrincipalKey<Claims, String>.self] = outer
-        let seen = Seen<ServiceContext>()
+        let seen = Seen<OperationContext>()
 
-        try await ServiceContext.withValue(context) {
+        try await OperationContext.withContext(context) {
             let principal = try await principalSeen(withAuthorization: "Bearer alice-token", contextSeen: seen)
             #expect(principal?.identity.subject == "alice")
-            #expect(await seen.value?[TraceKey.self] == "trace-1")
-            #expect(ServiceContext.current?[PrincipalKey<Claims, String>.self]?.identity == outer.identity)
-            #expect(ServiceContext.current?[PrincipalKey<Claims, String>.self]?.credential == outer.credential)
+            #expect(await seen.value?[RequestIDKey.self] == "request-1")
+            #expect(OperationContext.current[PrincipalKey<Claims, String>.self]?.identity == outer.identity)
+            #expect(OperationContext.current[PrincipalKey<Claims, String>.self]?.credential == outer.credential)
         }
     }
 }

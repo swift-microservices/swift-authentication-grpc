@@ -31,8 +31,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.3.0"),
-        .package(url: "https://github.com/apple/swift-service-context.git", from: "1.3.0"),
+        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.4.0"),
+        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", from: "0.1.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.0"),
     ],
     targets: [
@@ -41,7 +41,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Authentication", package: "swift-authentication"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
-                .product(name: "ServiceContextModule", package: "swift-service-context"),
+                .product(name: "OperationContext", package: "swift-operation-context"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -51,7 +51,7 @@ let package = Package(
                 .target(name: "AuthenticationGRPC"),
                 .product(name: "Authentication", package: "swift-authentication"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
-                .product(name: "ServiceContextModule", package: "swift-service-context"),
+                .product(name: "OperationContext", package: "swift-operation-context"),
             ],
             swiftSettings: swiftSettings
         ),
