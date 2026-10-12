@@ -6,7 +6,7 @@ User bearer authentication and propagation for gRPC, with mandatory transport mT
 services.
 
 ```swift
-.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.4.0"),
+.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.5.0"),
 ```
 
 ```swift
@@ -49,14 +49,14 @@ let server = GRPCServer(
 ```
 
 `Authenticator.authenticate(_:)` returns an identity or throws. A verified token binds a
-`Principal<UserIdentity, String>` in `ServiceContext` for the length of the call. An invalid token
+`Principal<UserIdentity, String>` in `OperationContext` for the length of the call. An invalid token
 ends the call with `RPCError(code: .unauthenticated)` before the handler runs.
 
 A missing token continues unbound. Each user handler requires its identity before invoking the
 owning use case, which checks user permissions before side effects:
 
 ```swift
-guard let user = ServiceContext.current?[PrincipalKey<UserIdentity, String>.self]?.identity else {
+guard let user = OperationContext.current[PrincipalKey<UserIdentity, String>.self]?.identity else {
     throw RPCError(code: .unauthenticated, message: "Sign in to continue.")
 }
 ```
@@ -90,7 +90,7 @@ request and context. Verify transport mTLS and certificate renewal with real TLS
 
 ## Requirements
 
-Swift 6.3, macOS 15 or Linux. grpc-swift-2 2.4, swift-authentication 0.3.
+Swift 6.3, macOS 15 or Linux. grpc-swift-2 2.4, swift-authentication 0.4.
 
 ## Development
 

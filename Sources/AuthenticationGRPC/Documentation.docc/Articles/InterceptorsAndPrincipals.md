@@ -17,7 +17,7 @@ input and enforce resource relationships, state transitions, consistency, and id
 
 ``BearerAuthenticationInterceptor`` reads `authorization` metadata and calls
 `Authenticator.authenticate(_:)`. A successful return binds the identity and original token as
-`Principal<UserIdentity, String>` in `ServiceContext` for the call. Verification failure returns
+`Principal<UserIdentity, String>` in `OperationContext` for the call. Verification failure returns
 `RPCError(code: .unauthenticated)` before the handler runs.
 
 A missing token continues unbound. The user handler requires the identity and passes it to the

@@ -4,7 +4,7 @@
 
 import Authentication
 public import GRPCCore
-import ServiceContextModule
+import OperationContext
 
 /// Presents the caller's bearer token on an outgoing call, so one token identifies the caller at
 /// every service in the chain.
@@ -36,7 +36,7 @@ public struct BearerPropagationInterceptor<Identity: Sendable>: ClientIntercepto
                 _ context: ClientContext
             ) async throws -> StreamingClientResponse<Output>
     ) async throws -> StreamingClientResponse<Output> {
-        guard let principal = ServiceContext.current?[PrincipalKey<Identity, String>.self] else {
+        guard let principal = OperationContext.current[PrincipalKey<Identity, String>.self] else {
             return try await next(request, context)
         }
 

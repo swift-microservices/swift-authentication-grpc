@@ -5,7 +5,7 @@
 import Authentication
 import AuthenticationGRPC
 import GRPCCore
-import ServiceContextModule
+import OperationContext
 import Testing
 
 @Suite
@@ -35,10 +35,10 @@ struct BearerPropagationInterceptorTests {
 
     @Test("The caller's token is presented on the outgoing call")
     func presentsTheCallersToken() async throws {
-        var context = ServiceContext.topLevel
+        var context = OperationContext()
         context[PrincipalKey<Claims, String>.self] = Principal(identity: Claims(subject: "alice"), credential: "alice-token")
 
-        let authorization = try await ServiceContext.withValue(context) {
+        let authorization = try await OperationContext.withContext(context) {
             try await outgoingAuthorization()
         }
 
