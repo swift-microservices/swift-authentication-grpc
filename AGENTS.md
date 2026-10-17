@@ -54,30 +54,8 @@ This package binds principals on gRPC. Read this before changing anything.
   there and is cut by hand.
 - Consumers pin by tag, never by branch or path.
 
-## Library CI profile
+## CI
 
-- This repository profile overrides general service CI and formatting defaults. Libraries
-  never commit `Package.resolved`; CI resolves released dependencies from the manifest.
-- PRs run documentation, formatting, compact license-header, shellcheck, and yamllint checks.
-  Automatic API-breakage checking is disabled by project choice; SemVer labels still describe
-  the public API impact. The docs workflow adds the DocC plugin only in its temporary checkout.
-- PRs and main pushes run swiftlang's `swift_package_test.yml`: `swift test -c release` on Swift
-  6.3, 6.4, and the next/main snapshots, on Ubuntu Noble. Tests run in release mode because the
-  package has no `assert` or `#if DEBUG` code; add a debug test job if it gains some. PRs also
-  run its x86_64 static Linux SDK builds. New toolchains arrive with swiftlang's default list
-  (6.1 and 6.2 excluded) when Dependabot bumps the pin.
-  CI has no scheduled runs. Require supported stable checks in branch protection; snapshot
-  failures remain visible and advisory unless maintainers explicitly require them.
-- Static SDK checks run on PRs only and cross-compile only.
-- CI is Linux-only by project choice. macOS and other Apple-platform builds/tests are
-  outside this pipeline; Linux success does not establish Apple-platform compatibility.
-- Every workflow and action is pinned to its latest release's full commit, with the release in
-  a comment; vapor/ci, which publishes no releases, is pinned to a `main` commit. swift-nio's
-  workflows are not used, because they download their scripts from `main` at run time; only
-  its SemVer label action remains.
-- Dependabot checks weekly, targets main, and labels workflow-update PRs `semver/none`.
-- Use the three-line MIT header matched by `.license_header_template`. Keep the tools-version
-  directive first in `Package.swift`, followed by that header. `.licenseignore` excludes the
-  manifest (the upstream checker requires a header at line one) and the plain-text `LICENSE`.
-- Keep the separate Foundation-linking consumer check, once, on Swift 6.3 Noble; a successful
-  static SDK build does not prove that the resolved graph avoids full Foundation.
+The standard library CI from the swift-microservices delivery skill
+([library-ci.md](https://github.com/swift-microservices/skills/blob/main/skills/delivering-swift-services/references/library-ci.md)).
+No exceptions.
