@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    name: CI
+    uses: swift-microservices/ci/.github/workflows/library.yml@b0f6615808222202e3278abc346fcd93fd4d6395  # 0.2.0
+    with:
+      linux_swift_versions: '["6.3", "6.4", "nightly-main", "nightly-6.4.x"]'
+      linux_host_archs: '["x86_64", "aarch64"]'
+      enable_linux_static_sdk_build: true
+      docs_check_targets: "AuthenticationGRPC"
