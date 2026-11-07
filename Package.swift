@@ -31,8 +31,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "0.4.0"),
-        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", from: "0.1.0"),
+        .package(url: "https://github.com/swift-microservices/swift-authentication.git", from: "1.0.0"),
+        .package(url: "https://github.com/swift-microservices/swift-operation-context.git", from: "1.0.0"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.0"),
     ],
     targets: [

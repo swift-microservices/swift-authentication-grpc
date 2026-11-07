@@ -6,7 +6,7 @@ User bearer authentication and propagation for gRPC, with mandatory transport mT
 services.
 
 ```swift
-.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "0.5.0"),
+.package(url: "https://github.com/swift-microservices/swift-authentication-grpc.git", from: "1.0.0"),
 ```
 
 ```swift
@@ -90,7 +90,7 @@ request and context. Verify transport mTLS and certificate renewal with real TLS
 
 ## Requirements
 
-Swift 6.3, macOS 15 or Linux. grpc-swift-2 2.4, swift-authentication 0.4.
+Swift 6.3, macOS 15 or Linux. grpc-swift-2 2.4, swift-authentication 1.0, swift-operation-context 1.0.
 
 ## Development
 
