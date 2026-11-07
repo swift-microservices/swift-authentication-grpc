@@ -42,7 +42,7 @@ This package binds principals on gRPC. Read this before changing anything.
   and ordered imports. Format all tracked Swift files, including `Package.swift`, and run
   `swift-format lint --strict`. Public documentation remains a repository requirement even
   though this formatter does not enforce it.
-- File headers use the compact license format documented below.
+- File headers use the compact license format in `.license_header_template`.
 
 ## Releases
 
